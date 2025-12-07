@@ -71,14 +71,8 @@ jobs:
             -var="region=${{ secrets.GCP_REGION }}" \
             -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
             -out=tfplan
+          terraform show -no-color tfplan > plan_output.txt
         working-directory: ${{ env.WORKING_DIR }}
-
-      - name: Upload Plan
-        uses: actions/upload-artifact@v4
-        with:
-          name: stage-terraform-plan-${{ github.sha }}
-          path: terraform/plan_output.txt
-          retention-days: 30
 
       - name: Security Scan (checkov)
         id: checkov
@@ -174,34 +168,4 @@ jobs:
               });
             }
 
-  cost-estimate:
-    name: 'Cost Estimation'
-    runs-on: ubuntu-latest
-    needs: validate-and-plan
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        
-      - name: Download Plan
-        uses: actions/download-artifact@v4
-        with:
-          name: stage-terraform-plan-${{ github.sha }}
-          path: ./
-
-      - name: Estimate Costs
-        run: |
-          echo "### 💰 Estimated Monthly Costs"
-          echo ""
-          echo "**GKE Autopilot Cluster:**"
-          echo "- Base: ~\$10-30/month (depends on pod usage)"
-          echo "- Network egress: ~\$0.12/GB"
-          echo "- Storage: ~\$0.17/GB-month"
-          echo ""
-          echo "**Tips to reduce costs:**"
-          echo "- Use Autopilot mode (you're already using it! ✅)"
-          echo "- Minimize persistent volumes"
-          echo "- Use proper resource requests/limits"
-          echo "- Clean up unused resources regularly"
-          echo ""
-          echo "[GCP Pricing Calculator](https://cloud.google.com/products/calculator)"
+  # cost-estimate job removed - can be added back if needed with proper artifact handling
