@@ -73,26 +73,6 @@ jobs:
             -out=tfplan
         working-directory: ${{ env.WORKING_DIR }}
 
-      - name: Analyze Plan Changes
-        id: analyze
-        run: |
-          terraform show -no-color tfplan > plan_output.txt
-          
-          # Count resources
-          ADDITIONS=$(grep -c "will be created" plan_output.txt || echo "0")
-          CHANGES=$(grep -c "will be updated" plan_output.txt || echo "0")
-          DESTRUCTIONS=$(grep -c "will be destroyed" plan_output.txt || echo "0")
-          
-          echo "additions=$ADDITIONS" >> $GITHUB_OUTPUT
-          echo "changes=$CHANGES" >> $GITHUB_OUTPUT
-          echo "destructions=$DESTRUCTIONS" >> $GITHUB_OUTPUT
-          
-          echo "### Plan Summary:"
-          echo "- 🆕 Resources to add: $ADDITIONS"
-          echo "- 🔄 Resources to change: $CHANGES"
-          echo "- 🗑️ Resources to destroy: $DESTRUCTIONS"
-        working-directory: ${{ env.WORKING_DIR }}
-
       - name: Upload Plan
         uses: actions/upload-artifact@v4
         with:
@@ -109,15 +89,10 @@ jobs:
 
       - name: Generate Summary
         uses: actions/github-script@v7
-        env:
-          ADDITIONS: ${{ steps.analyze.outputs.additions }}
-          CHANGES: ${{ steps.analyze.outputs.changes }}
-          DESTRUCTIONS: ${{ steps.analyze.outputs.destructions }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const planOutput = fs.readFileSync('terraform/plan_output.txt', 'utf8');
             
             const summary = `## 🔍 Stage Branch Validation Report
             
@@ -136,23 +111,10 @@ jobs:
             | Plan | ${{ steps.plan.outcome == 'success' && '✅' || '❌' }} |
             | Security Scan | ${{ steps.checkov.outcome == 'success' && '✅' || '⚠️' }} |
             
-            ### 📊 Planned Changes
-            - 🆕 **To Add**: ${process.env.ADDITIONS} resources
-            - 🔄 **To Change**: ${process.env.CHANGES} resources
-            - 🗑️ **To Destroy**: ${process.env.DESTRUCTIONS} resources
-            
-            <details><summary>📋 View Full Terraform Plan</summary>
-            
-            \`\`\`terraform
-            ${planOutput.substring(0, 50000)}
-            \`\`\`
-            
-            </details>
-            
             ### 🚀 Ready to Apply?
             
             **To apply these changes:**
-            1. Review the plan above carefully
+            1. Review the plan carefully
             2. Create a PR: \`stage\` → \`main\`
             3. Get approval from team members
             4. Merge PR to trigger automatic apply
@@ -171,20 +133,20 @@ jobs:
             await core.summary.addRaw(summary).write();
 
       - name: Notify on Destructive Changes
-        if: steps.analyze.outputs.destructions > 0
+        if: failure()
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            core.warning(`⚠️ WARNING: This plan will DESTROY ${process.env.DESTRUCTIONS} resources!`);
+            core.warning('⚠️ Validation checks failed. Please review the logs above.');
             
-            const comment = `## ⚠️ DESTRUCTIVE CHANGES DETECTED
+            const comment = `## ⚠️ VALIDATION FAILED
             
-            This Terraform plan will **destroy ${process.env.DESTRUCTIONS} resource(s)**.
+            The stage branch validation workflow encountered errors.
             
-            Please review carefully before applying to production!
+            Please review the workflow logs to identify and fix the issues.
             
-            @${{ github.actor }} - ensure this is intentional.
+            @${{ github.actor }} - action required.
             `;
             
             // Post comment if this is a PR
