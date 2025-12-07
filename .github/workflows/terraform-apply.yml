@@ -49,6 +49,8 @@ jobs:
 
       - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: 'gke-gcloud-auth-plugin'
 
       - name: Terraform Init
         run: terraform init
@@ -81,6 +83,13 @@ jobs:
         run: terraform apply -auto-approve tfplan
         working-directory: ${{ env.WORKING_DIR }}
 
+      - name: Install GKE Auth Plugin
+        if: success()
+        run: |
+          echo "Installing gke-gcloud-auth-plugin..."
+          gcloud components install gke-gcloud-auth-plugin --quiet
+          echo "export USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> $GITHUB_ENV
+
       - name: Get GKE Credentials
         if: success()
         run: |
@@ -95,10 +104,13 @@ jobs:
           kubectl cluster-info
           
           echo -e "\n=== Nodes ==="
-          kubectl get nodes
+          kubectl get nodes -o wide || echo "No nodes yet (Autopilot provisions on demand)"
           
           echo -e "\n=== Namespaces ==="
           kubectl get namespaces
+          
+          echo -e "\n=== System Pods ==="
+          kubectl get pods -n kube-system || echo "System pods provisioning..."
 
       - name: Create Success Issue
         if: success()
