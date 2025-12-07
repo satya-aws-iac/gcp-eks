@@ -1,10 +1,16 @@
 name: 'Terraform Plan'
 
 on:
+  push:
+    branches:
+      - stage  # Trigger on push to stage branch
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-*.yml'
   pull_request:
     branches:
+      - main
       - stage
-     
     paths:
       - 'terraform/**'
       - '.github/workflows/terraform-*.yml'
@@ -20,6 +26,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      issues: write
 
     steps:
       - name: Checkout
@@ -65,7 +72,21 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         continue-on-error: true
 
-      - name: Comment PR
+      - name: Save Plan Output
+        if: always()
+        run: |
+          terraform show -no-color tfplan > plan_output.txt 2>&1 || echo "Plan failed" > plan_output.txt
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Upload Plan Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ github.sha }}
+          path: terraform/plan_output.txt
+          retention-days: 30
+
+      - name: Comment PR (if PR event)
         uses: actions/github-script@v7
         if: github.event_name == 'pull_request'
         env:
@@ -78,7 +99,7 @@ jobs:
             #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
             <details><summary>Validation Output</summary>
 
-            \`\`\`\n
+            \`\`\`
             ${{ steps.validate.outputs.stdout }}
             \`\`\`
 
@@ -88,13 +109,13 @@ jobs:
 
             <details><summary>Show Plan</summary>
 
-            \`\`\`terraform\n
+            \`\`\`terraform
             ${process.env.PLAN}
             \`\`\`
 
             </details>
 
-            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Workflow: \`${{ github.workflow }}\`*`;
+            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Branch: \`${{ github.ref_name }}\`, Workflow: \`${{ github.workflow }}\`*`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -102,6 +123,73 @@ jobs:
               repo: context.repo.repo,
               body: output
             })
+
+      - name: Create Issue Comment (if push to stage)
+        uses: actions/github-script@v7
+        if: github.event_name == 'push' && github.ref == 'refs/heads/stage'
+        env:
+          PLAN: ${{ steps.plan.outputs.stdout }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const planOutput = fs.readFileSync('terraform/plan_output.txt', 'utf8');
+            
+            const output = `## Terraform Plan - Stage Branch
+            
+            **Branch**: \`stage\`
+            **Commit**: \`${{ github.sha }}\`
+            **Author**: @${{ github.actor }}
+            **Triggered**: Push to stage branch
+            
+            #### Results:
+            - Format Check: \`${{ steps.fmt.outcome }}\`
+            - Initialization: \`${{ steps.init.outcome }}\`
+            - Validation: \`${{ steps.validate.outcome }}\`
+            - Plan: \`${{ steps.plan.outcome }}\`
+            
+            <details><summary>📋 View Full Plan Output</summary>
+            
+            \`\`\`terraform
+            ${planOutput.substring(0, 60000)}
+            \`\`\`
+            
+            </details>
+            
+            ---
+            **Next Steps**: 
+            - Review the plan above
+            - If approved, merge \`stage\` → \`main\` to apply changes
+            - [View Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            `;
+
+            // Create or update issue
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'terraform-plan,stage',
+              per_page: 1
+            });
+
+            if (issues.data.length > 0) {
+              // Update existing issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issues.data[0].number,
+                body: output
+              });
+            } else {
+              // Create new issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `Terraform Plan Review - Stage Branch`,
+                body: output,
+                labels: ['terraform-plan', 'stage']
+              });
+            }
 
       - name: Terraform Plan Status
         if: steps.plan.outcome == 'failure'

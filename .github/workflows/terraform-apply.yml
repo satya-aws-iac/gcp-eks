@@ -3,11 +3,16 @@ name: 'Terraform Apply'
 on:
   push:
     branches:
-      - main
+      - main  # Only apply on main branch
     paths:
       - 'terraform/**'
       - '.github/workflows/terraform-*.yml'
   workflow_dispatch:  # Manual trigger
+    inputs:
+      confirm:
+        description: 'Type "apply" to confirm'
+        required: true
+        default: ''
 
 env:
   TF_VERSION: '1.6.0'
@@ -20,6 +25,15 @@ jobs:
     environment: production  # GitHub environment for protection rules
 
     steps:
+      - name: Validate Manual Confirmation
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "apply" ]; then
+            echo "❌ Confirmation failed. You must type 'apply' to proceed."
+            exit 1
+          fi
+          echo "✅ Manual confirmation received"
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -41,6 +55,7 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
 
       - name: Terraform Plan
+        id: plan
         run: |
           terraform plan -input=false \
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
@@ -49,17 +64,103 @@ jobs:
             -out=tfplan
         working-directory: ${{ env.WORKING_DIR }}
 
+      - name: Save Plan for Review
+        run: |
+          terraform show -no-color tfplan > plan_before_apply.txt
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-before-apply-${{ github.sha }}
+          path: terraform/plan_before_apply.txt
+          retention-days: 90
+
       - name: Terraform Apply
+        id: apply
         run: terraform apply -auto-approve tfplan
         working-directory: ${{ env.WORKING_DIR }}
 
       - name: Get GKE Credentials
+        if: success()
         run: |
           gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
             --region ${{ secrets.GCP_REGION }} \
             --project ${{ secrets.GCP_PROJECT_ID }}
 
       - name: Verify Cluster
+        if: success()
         run: |
+          echo "=== Cluster Info ==="
           kubectl cluster-info
+          
+          echo -e "\n=== Nodes ==="
           kubectl get nodes
+          
+          echo -e "\n=== Namespaces ==="
+          kubectl get namespaces
+
+      - name: Create Success Issue
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `## ✅ Terraform Apply Successful
+            
+            **Branch**: \`main\`
+            **Commit**: \`${{ github.sha }}\`
+            **Author**: @${{ github.actor }}
+            **Cluster**: \`${{ secrets.GKE_CLUSTER_NAME }}\`
+            **Region**: \`${{ secrets.GCP_REGION }}\`
+            
+            ### Changes Applied:
+            Infrastructure changes have been successfully applied to GCP.
+            
+            ### Next Steps:
+            - Verify cluster health: [View Cluster](https://console.cloud.google.com/kubernetes/clusters)
+            - Deploy applications to the cluster
+            - Monitor cluster metrics
+            
+            [View Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            `;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `✅ Terraform Applied - ${new Date().toISOString().split('T')[0]}`,
+              body: output,
+              labels: ['terraform-apply', 'success']
+            });
+
+      - name: Create Failure Issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `## ❌ Terraform Apply Failed
+            
+            **Branch**: \`main\`
+            **Commit**: \`${{ github.sha }}\`
+            **Author**: @${{ github.actor }}
+            
+            ### Error:
+            The Terraform apply operation failed. Please review the logs and fix the issues.
+            
+            ### Action Required:
+            1. Check the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            2. Fix the Terraform configuration
+            3. Test in \`stage\` branch first
+            4. Re-deploy to \`main\`
+            
+            @${{ github.actor }} please investigate.
+            `;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `❌ Terraform Apply Failed - ${new Date().toISOString().split('T')[0]}`,
+              body: output,
+              labels: ['terraform-apply', 'failure', 'urgent']
+            });
