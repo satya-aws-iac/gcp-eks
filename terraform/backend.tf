@@ -1,6 +1,8 @@
 terraform {
   backend "gcs" {
-    bucket = "your-terraform-state-bucket"  # Replace with your bucket name
+    bucket = "satya-k8-poc-terraform-state"
     prefix = "terraform/gke/state"
   }
 }
+
+
