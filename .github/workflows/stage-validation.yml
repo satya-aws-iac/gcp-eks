@@ -89,10 +89,6 @@ jobs:
 
       - name: Generate Summary
         uses: actions/github-script@v7
-        env:
-          ADDITIONS: ${{ steps.analyze.outputs.additions }}
-          CHANGES: ${{ steps.analyze.outputs.changes }}
-          DESTRUCTIONS: ${{ steps.analyze.outputs.destructions }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -110,16 +106,11 @@ jobs:
             ### Validation Results
             | Check | Status |
             |-------|--------|
-            | Format | ${{ steps.fmt.outcome == 'success' ? '✅' : '❌' }} |
-            | Init | ${{ steps.init.outcome == 'success' ? '✅' : '❌' }} |
-            | Validate | ${{ steps.validate.outcome == 'success' ? '✅' : '❌' }} |
-            | Plan | ${{ steps.plan.outcome == 'success' ? '✅' : '❌' }} |
-            | Security Scan | ${{ steps.checkov.outcome == 'success' ? '✅' : '⚠️' }} |
-            
-            ### 📊 Planned Changes
-            - 🆕 **To Add**: ${process.env.ADDITIONS} resources
-            - 🔄 **To Change**: ${process.env.CHANGES} resources
-            - 🗑️ **To Destroy**: ${process.env.DESTRUCTIONS} resources
+            | Format | ${{ steps.fmt.outcome == 'success' && '✅' || '❌' }} |
+            | Init | ${{ steps.init.outcome == 'success' && '✅' || '❌' }} |
+            | Validate | ${{ steps.validate.outcome == 'success' && '✅' || '❌' }} |
+            | Plan | ${{ steps.plan.outcome == 'success' && '✅' || '❌' }} |
+            | Security Scan | ${{ steps.checkov.outcome == 'success' && '✅' || '⚠️' }} |
             
             <details><summary>📋 View Full Terraform Plan</summary>
             
@@ -150,21 +141,21 @@ jobs:
             
             await core.summary.addRaw(summary).write();
 
-      - name: Notify on Destructive Changes
-        if: steps.analyze.outputs.destructions > 0
+      - name: Notify on Validation Failure
+        if: failure()
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            core.warning(`⚠️ WARNING: This plan will DESTROY ${process.env.DESTRUCTIONS} resources!`);
+            core.warning('⚠️ Validation checks failed. Please review the logs above.');
             
-            const comment = `## ⚠️ DESTRUCTIVE CHANGES DETECTED
+            const comment = `## ⚠️ VALIDATION FAILED
             
-            This Terraform plan will **destroy ${process.env.DESTRUCTIONS} resource(s)**.
+            The stage branch validation workflow encountered errors.
             
-            Please review carefully before applying to production!
+            Please review the workflow logs to identify and fix the issues.
             
-            @${{ github.actor }} - ensure this is intentional.
+            @${{ github.actor }} - action required.
             `;
             
             // Post comment if this is a PR
