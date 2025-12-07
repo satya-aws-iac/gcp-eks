@@ -1,0 +1,32 @@
+# PowerShell: Set Project ID and Region
+$env:PROJECT_ID="satya-k8-poc"
+$env:REGION="us-central1"
+
+# Create GCS bucket for Terraform state
+gcloud storage buckets create gs://satya-k8-poc-terraform-state --project=$env:PROJECT_ID --location=$env:REGION
+
+# Enable versioning on the bucket
+gcloud storage buckets update gs://satya-k8-poc-terraform-state --versioning
+
+# Create service account for GitHub Actions
+gcloud iam service-accounts create github-actions-gke `
+    --display-name="GitHub Actions GKE Service Account"
+
+# Grant container admin role
+gcloud projects add-iam-policy-binding $env:PROJECT_ID `
+    --member="serviceAccount:github-actions-gke@${env:PROJECT_ID}.iam.gserviceaccount.com" `
+    --role="roles/container.admin"
+
+# Grant compute admin role
+gcloud projects add-iam-policy-binding $env:PROJECT_ID `
+    --member="serviceAccount:github-actions-gke@${env:PROJECT_ID}.iam.gserviceaccount.com" `
+    --role="roles/compute.admin"
+
+# Grant IAM service account user role
+gcloud projects add-iam-policy-binding $env:PROJECT_ID `
+    --member="serviceAccount:github-actions-gke@${env:PROJECT_ID}.iam.gserviceaccount.com" `
+    --role="roles/iam.serviceAccountUser"
+
+# Create service account key
+gcloud iam service-accounts keys create gke-key.json `
+    --iam-account=github-actions-gke@${env:PROJECT_ID}.iam.gserviceaccount.com
