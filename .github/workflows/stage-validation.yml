@@ -130,11 +130,11 @@ jobs:
             ### Validation Results
             | Check | Status |
             |-------|--------|
-            | Format | ${{ steps.fmt.outcome == 'success' ? '✅' : '❌' }} |
-            | Init | ${{ steps.init.outcome == 'success' ? '✅' : '❌' }} |
-            | Validate | ${{ steps.validate.outcome == 'success' ? '✅' : '❌' }} |
-            | Plan | ${{ steps.plan.outcome == 'success' ? '✅' : '❌' }} |
-            | Security Scan | ${{ steps.checkov.outcome == 'success' ? '✅' : '⚠️' }} |
+            | Format | ${{ steps.fmt.outcome == 'success' && '✅' || '❌' }} |
+            | Init | ${{ steps.init.outcome == 'success' && '✅' || '❌' }} |
+            | Validate | ${{ steps.validate.outcome == 'success' && '✅' || '❌' }} |
+            | Plan | ${{ steps.plan.outcome == 'success' && '✅' || '❌' }} |
+            | Security Scan | ${{ steps.checkov.outcome == 'success' && '✅' || '⚠️' }} |
             
             ### 📊 Planned Changes
             - 🆕 **To Add**: ${process.env.ADDITIONS} resources
