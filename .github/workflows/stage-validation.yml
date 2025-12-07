@@ -71,6 +71,7 @@ jobs:
             -var="region=${{ secrets.GCP_REGION }}" \
             -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
             -out=tfplan
+          terraform show -no-color tfplan > plan_output.txt
         working-directory: ${{ env.WORKING_DIR }}
 
       - name: Upload Plan
