@@ -1,0 +1,51 @@
+name: 'GKE Cluster Health Check'
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # Every 6 hours
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    name: Check Cluster Health
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: 'gke-gcloud-auth-plugin'
+
+      - name: Set GKE Auth Plugin Environment
+        run: echo "USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> $GITHUB_ENV
+
+      - name: Get GKE Credentials
+        run: |
+          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
+            --region ${{ secrets.GCP_REGION }} \
+            --project ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Check Cluster Status
+        run: |
+          echo "=== Cluster Info ==="
+          kubectl cluster-info
+          
+          echo -e "\n=== Node Status ==="
+          kubectl get nodes -o wide
+          
+          echo -e "\n=== Pod Status ==="
+          kubectl get pods --all-namespaces
+          
+          echo -e "\n=== Service Status ==="
+          kubectl get services --all-namespaces
+          
+          echo -e "\n=== Resource Usage ==="
+          kubectl top nodes || echo "Metrics not available"
+          
+          echo -e "\n=== Recent Events ==="
+          kubectl get events --all-namespaces --sort-by='.lastTimestamp' | tail -20
