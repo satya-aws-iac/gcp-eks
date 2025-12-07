@@ -1,4 +1,4 @@
-﻿# GKE Autopilot - Serverless, Pay-per-Pod model
+# GKE Autopilot - Serverless, Pay-per-Pod model
 # This is cheaper for small workloads as you only pay for what you use
 # No management fee, no node pool management needed
 
