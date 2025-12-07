@@ -1,4 +1,4 @@
-# GKE Autopilot - Serverless, Pay-per-Pod model
+﻿# GKE Autopilot - Serverless, Pay-per-Pod model
 # This is cheaper for small workloads as you only pay for what you use
 # No management fee, no node pool management needed
 
@@ -32,12 +32,12 @@ resource "google_compute_subnetwork" "subnet" {
 
   secondary_ip_range {
     range_name    = "pods"
-    ip_cidr_range = "10.1.0.0/20"
+    ip_cidr_range = "10.1.0.0/16"
   }
 
   secondary_ip_range {
     range_name    = "services"
-    ip_cidr_range = "10.2.0.0/20"
+    ip_cidr_range = "10.2.0.0/16"
   }
 }
 
