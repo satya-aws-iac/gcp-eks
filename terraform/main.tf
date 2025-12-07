@@ -63,7 +63,7 @@ resource "google_container_cluster" "autopilot" {
     channel = "REGULAR"
   }
 
-  # Maintenance window
+  # Maintenance windows
   maintenance_policy {
     daily_maintenance_window {
       start_time = "03:00"
