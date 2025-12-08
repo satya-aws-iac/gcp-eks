@@ -54,9 +54,18 @@ gcloud iam workload-identity-pools providers create-oidc "github-provider" `
 Write-Host "✅ Workload Identity Provider created" -ForegroundColor Green
 
 # ============================================
-# Step 4: Get the Workload Identity Pool Resource
+# Step 4: Get the Workload Identity Provider resource name
 # ============================================
-Write-Host "Step 4: Getting Workload Identity Pool resource name..." -ForegroundColor Green
+Write-Host "Step 4: Getting Workload Identity Provider resource name..." -ForegroundColor Green
+
+$WORKLOAD_IDENTITY_PROVIDER = "projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/providers/github-provider"
+
+Write-Host "Workload Identity Provider: $WORKLOAD_IDENTITY_PROVIDER" -ForegroundColor Yellow
+
+# ============================================
+# Step 5: Get the Workload Identity Pool Resource
+# ============================================
+Write-Host "Step 5: Getting Workload Identity Pool resource name..." -ForegroundColor Green
 
 $WORKLOAD_IDENTITY_POOL_RESOURCE = gcloud iam workload-identity-pools describe github-pool `
     --project=$PROJECT_ID `
@@ -66,9 +75,9 @@ $WORKLOAD_IDENTITY_POOL_RESOURCE = gcloud iam workload-identity-pools describe g
 Write-Host "Workload Identity Pool Resource: $WORKLOAD_IDENTITY_POOL_RESOURCE" -ForegroundColor Yellow
 
 # ============================================
-# Step 5: Create Service Account (if not exists)
+# Step 6: Create Service Account (if not exists)
 # ============================================
-Write-Host "Step 5: Ensuring GitHub Actions service account exists..." -ForegroundColor Green
+Write-Host "Step 6: Ensuring GitHub Actions service account exists..." -ForegroundColor Green
 
 $SERVICE_ACCOUNT = "github-actions-gke@${PROJECT_ID}.iam.gserviceaccount.com"
 
@@ -80,9 +89,9 @@ gcloud iam service-accounts create github-actions-gke `
 Write-Host "Service Account: $SERVICE_ACCOUNT" -ForegroundColor Yellow
 
 # ============================================
-# Step 6: Grant roles to service account
+# Step 7: Grant roles to service account
 # ============================================
-Write-Host "Step 6: Granting IAM roles to service account..." -ForegroundColor Green
+Write-Host "Step 7: Granting IAM roles to service account..." -ForegroundColor Green
 
 $ROLES = @(
     "roles/container.admin",
@@ -94,26 +103,27 @@ $ROLES = @(
 foreach ($ROLE in $ROLES) {
     gcloud projects add-iam-policy-binding $PROJECT_ID `
         --member="serviceAccount:$SERVICE_ACCOUNT" `
-        --role="$ROLE"
+        --role="$ROLE" 2>$null
     Write-Host "✅ Granted $ROLE" -ForegroundColor Green
 }
 
 # ============================================
-# Step 7: Create Workload Identity Binding
+# Step 8: Create Workload Identity Binding
 # ============================================
-Write-Host "Step 7: Creating Workload Identity binding..." -ForegroundColor Green
+Write-Host "Step 8: Creating Workload Identity binding..." -ForegroundColor Green
 
-$WORKLOAD_IDENTITY_PRINCIPAL = "principalSet://iam.googleapis.com/${WORKLOAD_IDENTITY_POOL_RESOURCE}/attribute.repository/${GITHUB_ORG}/${GITHUB_REPO}"
+# Allow GitHub Actions to impersonate the service account
+$WORKLOAD_IDENTITY_PRINCIPAL = "principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/attribute.repository/$GITHUB_ORG/$GITHUB_REPO"
 
 gcloud iam service-accounts add-iam-policy-binding $SERVICE_ACCOUNT `
     --project=$PROJECT_ID `
     --role="roles/iam.workloadIdentityUser" `
-    --member="$WORKLOAD_IDENTITY_PRINCIPAL"
+    --member="$WORKLOAD_IDENTITY_PRINCIPAL" 2>$null
 
-Write-Host "✅ Workload Identity binding created" -ForegroundColor Green
+Write-Host "✅ Service account configured for Workload Identity" -ForegroundColor Green
 
 # ============================================
-# Step 8: Output Configuration for GitHub Actions
+# Step 9: Output Configuration for GitHub Actions
 # ============================================
 Write-Host "`n" -ForegroundColor Green
 Write-Host "=====================================" -ForegroundColor Cyan

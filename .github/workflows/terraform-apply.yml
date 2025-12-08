@@ -18,6 +18,9 @@ jobs:
     name: 'Terraform Apply'
     runs-on: ubuntu-latest
     environment: production  # GitHub environment for protection rules
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: Checkout
