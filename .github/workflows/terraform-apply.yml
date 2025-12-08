@@ -63,3 +63,5 @@ jobs:
           gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
             --region ${{ secrets.GCP_REGION }} \
             --project ${{ secrets.GCP_PROJECT_ID }}
+
+ 
