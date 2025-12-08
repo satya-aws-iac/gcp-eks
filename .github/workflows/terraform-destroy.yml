@@ -70,7 +70,7 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
 
       - name: Terraform Destroy
-        run: terraform destroy -auto-approve destroy_plan
+        run: terraform apply -auto-approve destroy_plan
         working-directory: ${{ env.WORKING_DIR }}
 
       - name: Confirm Cluster Deletion
@@ -101,28 +101,4 @@ jobs:
               ⚠️ **Note**: If you have any persistent data (databases, storage buckets) outside of Terraform, they may still exist.
               `,
               labels: ['terraform', 'destroyed']
-            });
-
-      - name: Create Failure Issue
-        uses: actions/github-script@v7
-        if: failure()
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const issue = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: '❌ GKE Cluster Destruction Failed',
-              body: `## Cluster Destruction Failed
-              
-              **Cluster**: \`${{ secrets.GKE_CLUSTER_NAME }}\`
-              **Project**: \`${{ secrets.GCP_PROJECT_ID }}\`
-              
-              The destruction workflow encountered an error. Please review the logs.
-              
-              **Workflow Run**: [View Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-              
-              @${{ github.actor }} - action required to investigate and fix the issue.
-              `,
-              labels: ['terraform', 'error']
             });
