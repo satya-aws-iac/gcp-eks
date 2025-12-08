@@ -52,6 +52,13 @@ jobs:
         run: terraform init
         working-directory: ${{ env.WORKING_DIR }}
 
+      - name: Force Unlock (if locked)
+        continue-on-error: true
+        run: |
+          # List state to check lock
+          terraform state list 2>&1 | grep -i "lock" || echo "No lock found"
+        working-directory: ${{ env.WORKING_DIR }}
+
       - name: Terraform Plan Destroy
         id: plan_destroy
         run: |
