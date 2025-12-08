@@ -64,6 +64,6 @@ jobs:
             --region ${{ secrets.GCP_REGION }} \
             --project ${{ secrets.GCP_PROJECT_ID }}
 
-      #- name: Terraform Destroy
-        #run: terraform destroy -auto-approve tfplan
-        #working-directory: ${{ env.WORKING_DIR }}
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve tfplan
+        working-directory: ${{ env.WORKING_DIR }}
