@@ -45,6 +45,7 @@ resource "google_compute_subnetwork" "subnet" {
 resource "google_container_cluster" "autopilot" {
   name     = var.cluster_name
   location = var.region
+  deletion_protection = false
 
   # Enable Autopilot
   enable_autopilot = true
