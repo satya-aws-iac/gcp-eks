@@ -1,8 +1,0 @@
-PowerShell# Set your project ID
-$env:PROJECT_ID="satya-k8-poc"
-gcloud config set project $env:PROJECT_ID
-
-# Enable required APIs
-gcloud services enable container.googleapis.com
-gcloud services enable compute.googleapis.com
-gcloud services enable cloudresourcemanager.googleapis.com
