@@ -2,7 +2,7 @@
 # DO NOT commit terraform.tfvars to git - add it to .gitignore
 
 project_id     = "satya-k8-poc"
-region         = "us-central1"
+region         = "us-central1-a"
 zone           = "us-central1-a" # Single zone for cost savings
 cluster_name   = "my-gke-cluster"
 environment    = "dev"
