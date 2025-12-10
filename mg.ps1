@@ -1,5 +1,8 @@
-# Migrate from GKE Autopilot to Standard GKE with 2 nodes
+# Standard GKE with 2 nodes
 # This script updates all necessary files
+#
+# Author: Mylavarapu Satyanarayana
+# Email: mllsatyanarayana@gmail.com
 
 Write-Host "========================================================" -ForegroundColor Cyan
 Write-Host "   Migrate to Standard GKE with 2 Nodes                " -ForegroundColor Cyan
@@ -212,13 +215,13 @@ variable "project_id" {
 variable "region" {
   description = "GCP region"
   type        = string
-  default     = "us-central1-a"
+  default     = "us-central1"
 }
 
 variable "zone" {
   description = "GCP zone (single zone for cost savings)"
   type        = string
-  default     = "us-central1-a-a"
+  default     = "us-central1-a"
 }
 
 variable "cluster_name" {
