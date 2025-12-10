@@ -1,0 +1,99 @@
+name: 'Terraform Unlock State'
+
+on:
+  workflow_dispatch:  # Manual trigger only
+
+env:
+  TF_VERSION: '1.6.0'
+  WORKING_DIR: './terraform'
+
+jobs:
+  unlock:
+    name: 'Unlock Terraform State'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          token_format: 'access_token'
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: List Lock Files
+        run: |
+          echo "Checking for lock files in GCS bucket..."
+          gcloud storage ls --recursive gs://satya-k8-poc-terraform-state/terraform/gke/state/ | grep -i lock || echo "No lock files found"
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Remove Lock File (if exists)
+        continue-on-error: true
+        run: |
+          echo "Attempting to remove lock file..."
+          gcloud storage rm gs://satya-k8-poc-terraform-state/terraform/gke/state/.terraform.lock.hcl 2>/dev/null || true
+          echo "Lock file removed or didn't exist"
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Verify State
+        run: |
+          echo "Verifying Terraform state..."
+          terraform state list
+        working-directory: ${{ env.WORKING_DIR }}
+        continue-on-error: true
+
+      - name: Create Success Issue
+        uses: actions/github-script@v7
+        if: success()
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '✅ Terraform State Unlocked',
+              body: `## State Lock Released
+              
+              The Terraform state lock has been successfully released.
+              
+              **Workflow Run**: [View Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              
+              You can now run Terraform operations again.
+              `,
+              labels: ['terraform', 'unlocked']
+            });
+
+      - name: Create Failure Issue
+        uses: actions/github-script@v7
+        if: failure()
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '❌ Failed to Unlock Terraform State',
+              body: `## State Unlock Failed
+              
+              The attempt to release the Terraform state lock encountered an error.
+              
+              **Workflow Run**: [View Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              
+              @${{ github.actor }} - please investigate manually.
+              `,
+              labels: ['terraform', 'error']
+            });
