@@ -423,6 +423,6 @@ gcloud billing projects describe satya-k8-poc
 **Project**: satya-k8-poc  
 **Repository**: satya-aws-iac/gcp-eks  
 **Maintained by**: Platform Team  
-**Last Updated**: December 2024
+**Last Updated**: December 2025
 
 ⭐ **Star this repo** if you find it helpful!
