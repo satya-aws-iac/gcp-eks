@@ -1,3 +1,1453 @@
+
+i am creating gks using git actions getting error " Error: Request Create IAM Members roles/logging.logWriter serviceAccount:***-gke-nodes@***.iam.gserviceaccount.com for project "***" returned error: Batch request and retried single request "Create IAM Members roles/logging.logWriter serviceAccount:***-gke-nodes@***.iam.gserviceaccount.com for project \"***\"" both failed. Final error: Error applying IAM policy for project "***": Error setting IAM policy for project "***": googleapi: Error 403: Policy update access denied., forbidden
+│ 
+│   with google_project_iam_member.gke_nodes_log_writer,
+│   on main.tf line 141, in resource "google_project_iam_member" "gke_nodes_log_writer":
+│  141: resource "google_project_iam_member" "gke_nodes_log_writer" __{__
+│ 
+╵
+╷
+│ Error: Request Create IAM Members roles/monitoring.metricWriter serviceAccount:***-gke-nodes@***.iam.gserviceaccount.com for project "***" returned error: Batch request and retried single request "Create IAM Members roles/monitoring.metricWriter serviceAccount:***-gke-nodes@***.iam.gserviceaccount.com for project \"***\"" both failed. Final error: Error applying IAM policy for project "***": Error setting IAM policy for project "***": googleapi: Error 403: Policy update access denied., forbidden
+│ 
+│   with google_project_iam_member.gke_nodes_metric_writer,
+│   on main.tf line 147, in resource "google_project_iam_member" "gke_nodes_metric_writer":
+│  147: resource "google_project_iam_member" "gke_nodes_metric_writer" __{__
+│ 
+╵
+╷
+│ Error: Request Create IAM Members roles/monitoring.viewer serviceAccount:***-gke-nodes@***.iam.gserviceaccount.com for project "***" returned error: Batch request and retried single request "Create IAM Members roles/monitoring.viewer serviceAccount:***-gke-nodes@***.iam.gserviceaccount.com for project \"***\"" both failed. Final error: Error applying IAM policy for project "***": Error setting IAM policy for project "***": googleapi: Error 403: Policy update access denied., forbidden
+│ 
+│   with google_project_iam_member.gke_nodes_monitoring_viewer,
+│   on main.tf line 153, in resource "google_project_iam_member" "gke_nodes_monitoring_viewer":
+│  153: resource "google_project_iam_member" "gke_nodes_monitoring_viewer" __{__
+│ 
+╵
+╷
+│ Error: Request Create IAM Members roles/stackdriver.resourceMetadata.writer serviceAccount:***-gke-nodes@***.iam.gserviceaccount.com for project "***" returned error: Batch request and retried single request "Create IAM Members roles/stackdriver.resourceMetadata.writer serviceAccount:***-gke-nodes@***.iam.gserviceaccount.com for project \"***\"" both failed. Final error: Error applying IAM policy for project "***": Error setting IAM policy for project "***": googleapi: Error 403: Policy update access denied., forbidden
+│ 
+│   with google_project_iam_member.gke_nodes_resource_metadata_writer,
+│   on main.tf line 159, in resource "google_project_iam_member" "gke_nodes_resource_metadata_writer":
+│  159: resource "google_project_iam_member" "gke_nodes_resource_metadata_writer" __{__
+│ 
+╵
+Error: Terraform exited with code 1.
+Error: Process completed with exit code 1.
+0s
+0s
+0s
+1s"
+
+Show more
+The error indicates a 403 Forbidden permission issue. The service account running your GitHub Actions workflow doesn't have sufficient IAM permissions to grant roles to the GKE node service account.
+
+Root Cause
+Your GitHub Actions service account needs the roles/iam.securityAdmin or roles/resourcemanager.projectIamAdmin role to modify IAM policies at the project level.
+
+Solutions
+Option 1: Grant Required Permissions (Recommended)
+Grant the GitHub Actions service account permission to manage IAM:
+
+bash
+# Replace with your actual service account email
+export GH_SA="your-github-actions-sa@your-project.iam.gserviceaccount.com"
+export PROJECT_ID="your-project-id"
+
+# Grant IAM admin permissions
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$GH_SA" \
+  --role="roles/iam.securityAdmin"
+Option 2: Use Workload Identity Federation (More Secure)
+If you're using Workload Identity Federation, ensure the service account has proper permissions:
+
+bash
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$GH_SA" \
+  --role="roles/iam.securityAdmin"
+  
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$GH_SA" \
+  --role="roles/container.admin"
+Option 3: Pre-create IAM Bindings
+If you can't grant IAM admin permissions, manually create the IAM bindings beforehand:
+
+bash
+export NODE_SA="your-project-gke-nodes@your-project.iam.gserviceaccount.com"
+export PROJECT_ID="your-project-id"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$NODE_SA" \
+  --role="roles/logging.logWriter"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$NODE_SA" \
+  --role="roles/monitoring.metricWriter"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$NODE_SA" \
+  --role="roles/monitoring.viewer"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$NODE_SA" \
+  --role="roles/stackdriver.resourceMetadata.writer"
+Then remove these resources from your Terraform configuration.
+
+Option 4: Modify Terraform to Use Service Account IAM
+Instead of project-level IAM, grant roles directly to the service account (requires fewer permissions):
+
+hcl
+resource "google_service_account_iam_member" "gke_nodes_log_writer" {
+  service_account_id = google_service_account.gke_nodes.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.gke_nodes.email}"
+}
+Verify Current Permissions
+Check what permissions your GitHub Actions SA currently has:
+
+bash
+gcloud projects get-iam-policy $PROJECT_ID \
+  --flatten="bindings[].members" \
+  --filter="bindings.members:serviceAccount:$GH_SA" \
+  --format="table(bindings.role)"
+The most common solution is Option 1 - granting roles/iam.securityAdmin to your GitHub Actions service account. This allows Terraform to manage IAM bindings as part of your infrastructure as code.
+
+how can i give mnaully using console
+
+Here's how to grant IAM permissions manually using the Google Cloud Console:
+
+Step-by-Step Guide
+1. Navigate to IAM & Admin
+Go to Google Cloud Console
+Select your project from the dropdown at the top
+In the left navigation menu, click IAM & Admin → IAM
+2. Grant Permissions to GitHub Actions Service Account
+Option A: If the service account already exists in the list
+
+Find your GitHub Actions service account in the list (e.g., github-actions@your-project.iam.gserviceaccount.com)
+Click the pencil/edit icon on the right side of that row
+Click + ADD ANOTHER ROLE
+Search for and select: Security Admin (or type roles/iam.securityAdmin)
+Click SAVE
+Option B: If the service account is NOT in the list
+
+Click + GRANT ACCESS button at the top
+In the "New principals" field, enter your GitHub Actions service account email:
+   your-github-actions-sa@your-project.iam.gserviceaccount.com
+Click Select a role dropdown
+Search for and select: Security Admin
+Optionally add more roles:
+Kubernetes Engine Admin (roles/container.admin)
+Compute Admin (roles/compute.admin) - if creating compute resources
+Click SAVE
+3. Grant Permissions to GKE Node Service Account (Alternative Approach)
+If you prefer to manually create the IAM bindings for GKE nodes instead:
+
+In IAM & Admin → IAM, click + GRANT ACCESS
+Enter the GKE node service account:
+   your-project-gke-nodes@your-project.iam.gserviceaccount.com
+Add these roles one by one:
+Logs Writer (roles/logging.logWriter)
+Monitoring Metric Writer (roles/monitoring.metricWriter)
+Monitoring Viewer (roles/monitoring.viewer)
+Stackdriver Resource Metadata Writer (roles/stackdriver.resourceMetadata.writer)
+Click SAVE
+Then remove these 4 resources from your Terraform to avoid conflicts:
+
+google_project_iam_member.gke_nodes_log_writer
+google_project_iam_member.gke_nodes_metric_writer
+google_project_iam_member.gke_nodes_monitoring_viewer
+google_project_iam_member.gke_nodes_resource_metadata_writer
+4. Verify the Changes
+Refresh the IAM page
+Search for your service account in the filter box
+Verify the roles are listed
+5. Re-run Your GitHub Actions Workflow
+After granting permissions, trigger your workflow again. The Terraform deployment should now succeed.
+
+Recommended Approach: Grant Security Admin to your GitHub Actions service account (Option A/B in Step 2) so Terraform can manage all IAM bindings automatically. This follows infrastructure-as-code best practices.
+
+Fetching cluster endpoint and auth data.
+ERROR: (gcloud.container.clusters.get-credentials) ResponseError: code=404, message=Not found: projects/***/locations/***/clusters/***. This command is authenticated as *** using the credentials in /home/runner/work/gcp-eks/gcp-eks/gha-creds-7cb1ae87de6a2198.json, specified by the [auth/credential_file_override] property.
+Could not find [***] in [***].
+Did you mean [***] in [***-a]?
+Error: Process completed with exit code 1.
+
+The error indicates that the GKE cluster either:
+
+Doesn't exist yet (still being created)
+Was created in a different location/region
+Has a different name than expected
+Quick Fixes
+Fix 1: Check if Cluster Creation Completed
+Your Terraform might have created the cluster, but the get-credentials command is running before it's ready or looking in the wrong place.
+
+In your GitHub Actions workflow, ensure you're using the correct outputs from Terraform:
+
+yaml
+- name: Get GKE Credentials
+  run: |
+    gcloud container clusters get-credentials ${{ steps.terraform.outputs.cluster_name }} \
+      --region=${{ steps.terraform.outputs.cluster_region }} \
+      --project=${{ steps.terraform.outputs.project_id }}
+Fix 2: Add Explicit Dependencies
+In your GitHub Actions workflow, make sure the get-credentials step runs AFTER Terraform apply completes:
+
+yaml
+- name: Terraform Apply
+  id: apply
+  run: terraform apply -auto-approve
+
+- name: Wait for cluster to be ready
+  run: sleep 30
+
+- name: Get cluster info from Terraform
+  id: cluster_info
+  run: |
+    echo "cluster_name=$(terraform output -raw cluster_name)" >> $GITHUB_OUTPUT
+    echo "cluster_region=$(terraform output -raw cluster_region)" >> $GITHUB_OUTPUT
+    echo "project_id=$(terraform output -raw project_id)" >> $GITHUB_OUTPUT
+
+- name: Get GKE Credentials
+  run: |
+    gcloud container clusters get-credentials ${{ steps.cluster_info.outputs.cluster_name }} \
+      --region=${{ steps.cluster_info.outputs.cluster_region }} \
+      --project=${{ steps.cluster_info.outputs.project_id }}
+Fix 3: Verify Location Type
+GKE clusters can be regional or zonal. Use the correct flag:
+
+For Regional Clusters:
+
+bash
+gcloud container clusters get-credentials CLUSTER_NAME \
+  --region=REGION \
+  --project=PROJECT_ID
+For Zonal Clusters:
+
+bash
+gcloud container clusters get-credentials CLUSTER_NAME \
+  --zone=ZONE \
+  --project=PROJECT_ID
+Fix 4: Add Terraform Outputs
+In your main.tf, add outputs to expose cluster information:
+
+hcl
+output "cluster_name" {
+  value       = google_container_cluster.primary.name
+  description = "GKE cluster name"
+}
+
+output "cluster_region" {
+  value       = google_container_cluster.primary.location
+  description = "GKE cluster region"
+}
+
+output "project_id" {
+  value       = var.project_id
+  description = "GCP Project ID"
+}
+Fix 5: Debug - List Available Clusters
+Add a debug step to see what clusters actually exist:
+
+yaml
+- name: Debug - List all clusters
+  run: |
+    echo "Listing all clusters in project:"
+    gcloud container clusters list --project=$PROJECT_ID
+    
+- name: Get GKE Credentials
+  run: |
+    # Use the actual values from the list above
+    gcloud container clusters get-credentials ACTUAL_CLUSTER_NAME \
+      --region=ACTUAL_REGION \
+      --project=$PROJECT_ID
+Most Common Solution
+Update your GitHub Actions workflow to properly extract Terraform outputs:
+
+yaml
+- name: Terraform Apply
+  run: terraform apply -auto-approve
+  working-directory: ./terraform
+
+- name: Extract Terraform Outputs
+  id: tf_outputs
+  run: |
+    echo "cluster_name=$(terraform output -raw cluster_name)" >> $GITHUB_OUTPUT
+    echo "region=$(terraform output -raw cluster_region)" >> $GITHUB_OUTPUT
+  working-directory: ./terraform
+
+- name: Get GKE Credentials
+  run: |
+    gcloud container clusters get-credentials "${{ steps.tf_outputs.outputs.cluster_name }}" \
+      --region="${{ steps.tf_outputs.outputs.region }}" \
+      --project="${{ secrets.GCP_PROJECT_ID }}"
+The error message suggests the cluster might exist in a different location (***-a instead of ***). Check if you're using the correct region/zone name in your command.
+
+ERROR: (gcloud.container.clusters.get-credentials) ResponseError: code=404, message=Not found: projects/***/locations/***/clusters/***. This command is authenticated as *** using the credentials in /home/runner/work/gcp-eks/gcp-eks/gha-creds-7cb1ae87de6a2198.json, specified by the [auth/credential_file_override] property.
+Could not find [***] in [***].
+Did you mean [***] in [***-a]?
+
+The error message is telling you exactly what's wrong! Notice the last line:
+
+"Did you mean [] in [-a]?"
+
+This means your cluster exists in a different zone/region than what you're specifying. The cluster is in ***-a (a zone) but you're looking in *** (the region).
+
+Solution
+You have a zone vs region mismatch. Here are the fixes:
+
+Fix 1: Use the Correct Zone (Quick Fix)
+If the error suggests us-central1-a, use that instead:
+
+yaml
+- name: Get GKE Credentials
+  run: |
+    gcloud container clusters get-credentials CLUSTER_NAME \
+      --zone=us-central1-a \
+      --project=${{ secrets.GCP_PROJECT_ID }}
+Note: Use --zone instead of --region for zonal clusters.
+
+Fix 2: Check Your Terraform Configuration
+Look at your main.tf file where you define the cluster:
+
+hcl
+resource "google_container_cluster" "primary" {
+  name     = "your-cluster-name"
+  location = "us-central1"    # <-- Check this value
+  # ...
+}
+The location field determines if it's regional or zonal:
+
+Regional: location = "us-central1" (no zone suffix)
+Zonal: location = "us-central1-a" (with zone suffix like -a, -b, -c)
+Fix 3: Match Your GitHub Actions to Terraform
+Option A: If your Terraform uses a zone (us-central1-a):
+
+yaml
+- name: Get GKE Credentials
+  run: |
+    gcloud container clusters get-credentials ${{ steps.tf_outputs.outputs.cluster_name }} \
+      --zone=${{ steps.tf_outputs.outputs.cluster_location }} \
+      --project=${{ secrets.GCP_PROJECT_ID }}
+Option B: If your Terraform uses a region (us-central1):
+
+yaml
+- name: Get GKE Credentials  
+  run: |
+    gcloud container clusters get-credentials ${{ steps.tf_outputs.outputs.cluster_name }} \
+      --region=${{ steps.tf_outputs.outputs.cluster_location }} \
+      --project=${{ secrets.GCP_PROJECT_ID }}
+Fix 4: Use Dynamic Location Flag
+Add this to handle both cases automatically:
+
+yaml
+- name: Get Cluster Location from Terraform
+  id: cluster
+  run: |
+    LOCATION=$(terraform output -raw cluster_location)
+    echo "location=${LOCATION}" >> $GITHUB_OUTPUT
+    
+    # Determine if it's a zone or region
+    if [[ $LOCATION == *-[a-z] ]]; then
+      echo "location_type=zone" >> $GITHUB_OUTPUT
+    else
+      echo "location_type=region" >> $GITHUB_OUTPUT
+    fi
+  working-directory: ./terraform
+
+- name: Get GKE Credentials
+  run: |
+    if [ "${{ steps.cluster.outputs.location_type }}" == "zone" ]; then
+      gcloud container clusters get-credentials ${{ steps.tf_outputs.outputs.cluster_name }} \
+        --zone=${{ steps.cluster.outputs.location }} \
+        --project=${{ secrets.GCP_PROJECT_ID }}
+    else
+      gcloud container clusters get-credentials ${{ steps.tf_outputs.outputs.cluster_name }} \
+        --region=${{ steps.cluster.outputs.location }} \
+        --project=${{ secrets.GCP_PROJECT_ID }}
+    fi
+Fix 5: Simplest Solution - Use What GCloud Suggests
+Based on the error message, just update your command to use the suggested zone:
+
+yaml
+- name: Get GKE Credentials
+  run: |
+    # Use the zone that the error message suggested (with -a suffix)
+    gcloud container clusters get-credentials CLUSTER_NAME \
+      --zone=us-central1-a \
+      --project=${{ secrets.GCP_PROJECT_ID }}
+Recommended: Update Terraform Output
+Make sure your Terraform exports the location correctly:
+
+hcl
+output "cluster_location" {
+  value       = google_container_cluster.primary.location
+  description = "GKE cluster location (region or zone)"
+}
+Then use it in GitHub Actions:
+
+yaml
+gcloud container clusters get-credentials "$(terraform output -raw cluster_name)" \
+  --zone="$(terraform output -raw cluster_location)" \
+  --project="${{ secrets.GCP_PROJECT_ID }}"
+The key issue: You're using --region when your cluster is in a specific zone (like us-central1-a). Change to --zone and use the correct zone name.
+
+Fetching cluster endpoint and auth data.
+ERROR: (gcloud.container.clusters.get-credentials) ResponseError: code=404, message=Not found: projects/***/locations/***/clusters/***. This command is authenticated as *** using the credentials in /home/runner/work/gcp-eks/gcp-eks/gha-creds-25dc6c20d8b45144.json, specified by the [auth/credential_file_override] property.
+
+The cluster doesn't exist yet or wasn't created successfully. Let's troubleshoot systematically.
+
+Step 1: Verify Cluster Was Created
+Add this debug step in your GitHub Actions workflow before the get-credentials command:
+
+yaml
+- name: Debug - Check if cluster exists
+  run: |
+    echo "Listing all clusters in project:"
+    gcloud container clusters list --project=${{ secrets.GCP_PROJECT_ID }}
+    
+    echo "Checking Terraform state:"
+    terraform show | grep google_container_cluster || echo "No cluster in state"
+  working-directory: ./terraform
+  continue-on-error: true
+
+- name: Get GKE Credentials
+  run: |
+    gcloud container clusters get-credentials ...
+Step 2: Check Terraform Apply Status
+Look at your Terraform Apply step output. Did it actually succeed? Check for:
+
+yaml
+- name: Terraform Apply
+  id: apply
+  run: terraform apply -auto-approve
+  working-directory: ./terraform
+
+- name: Check Terraform Apply Status
+  if: steps.apply.outcome == 'failure'
+  run: |
+    echo "Terraform apply failed!"
+    exit 1
+Step 3: Common Causes & Solutions
+Cause A: Cluster Creation Takes Time
+GKE clusters take 5-10 minutes to create. Add a wait:
+
+yaml
+- name: Terraform Apply
+  run: terraform apply -auto-approve
+  working-directory: ./terraform
+
+- name: Wait for cluster to be fully ready
+  run: |
+    echo "Waiting for cluster to be ready..."
+    sleep 120  # Wait 2 minutes
+    
+    # Or wait until cluster is RUNNING
+    CLUSTER_NAME=$(terraform output -raw cluster_name)
+    LOCATION=$(terraform output -raw cluster_location)
+    
+    for i in {1..30}; do
+      STATUS=$(gcloud container clusters describe $CLUSTER_NAME \
+        --zone=$LOCATION \
+        --project=${{ secrets.GCP_PROJECT_ID }} \
+        --format="value(status)" 2>/dev/null || echo "NOT_FOUND")
+      
+      if [ "$STATUS" == "RUNNING" ]; then
+        echo "Cluster is ready!"
+        break
+      fi
+      
+      echo "Cluster status: $STATUS. Waiting... ($i/30)"
+      sleep 20
+    done
+  working-directory: ./terraform
+
+- name: Get GKE Credentials
+  run: |
+    gcloud container clusters get-credentials $(terraform output -raw cluster_name) \
+      --zone=$(terraform output -raw cluster_location) \
+      --project=${{ secrets.GCP_PROJECT_ID }}
+  working-directory: ./terraform
+Cause B: Terraform Apply Failed Silently
+Check if there were errors during terraform apply:
+
+yaml
+- name: Terraform Apply
+  id: apply
+  run: |
+    terraform apply -auto-approve 2>&1 | tee apply.log
+    exit ${PIPESTATUS[0]}
+  working-directory: ./terraform
+
+- name: Show Terraform Errors
+  if: failure()
+  run: |
+    echo "Terraform apply failed. Errors:"
+    cat apply.log
+    
+    echo "Terraform state list:"
+    terraform state list
+  working-directory: ./terraform
+Cause C: Wrong Working Directory
+Make sure your Terraform commands use the correct directory:
+
+yaml
+- name: Terraform Init
+  run: terraform init
+  working-directory: ./terraform  # Adjust this path
+
+- name: Terraform Apply  
+  run: terraform apply -auto-approve
+  working-directory: ./terraform  # Same path
+
+- name: Get Outputs
+  run: |
+    terraform output -raw cluster_name
+    terraform output -raw cluster_location
+  working-directory: ./terraform  # Same path
+Cause D: Cluster Creation Disabled
+Check if cluster creation is conditional in your Terraform:
+
+hcl
+# In your main.tf - make sure this isn't commented out
+resource "google_container_cluster" "primary" {
+  name     = var.cluster_name
+  location = var.cluster_location
+  # ... rest of config
+}
+Step 4: Complete Debug Workflow
+Replace your current workflow with this debugging version:
+
+yaml
+- name: Terraform Apply
+  id: apply
+  run: |
+    terraform apply -auto-approve
+    echo "Terraform apply completed with exit code: $?"
+  working-directory: ./terraform
+
+- name: Verify Cluster in Terraform State
+  run: |
+    echo "=== Terraform State ==="
+    terraform state list
+    
+    echo "=== Cluster Resources ==="
+    terraform state list | grep google_container_cluster || echo "No cluster found in state!"
+  working-directory: ./terraform
+
+- name: Get Cluster Details from Terraform
+  id: cluster_info
+  run: |
+    if terraform output cluster_name &>/dev/null; then
+      CLUSTER_NAME=$(terraform output -raw cluster_name)
+      CLUSTER_LOCATION=$(terraform output -raw cluster_location)
+      PROJECT_ID=$(terraform output -raw project_id)
+      
+      echo "cluster_name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
+      echo "cluster_location=${CLUSTER_LOCATION}" >> $GITHUB_OUTPUT
+      echo "project_id=${PROJECT_ID}" >> $GITHUB_OUTPUT
+      
+      echo "Cluster Name: ${CLUSTER_NAME}"
+      echo "Cluster Location: ${CLUSTER_LOCATION}"
+      echo "Project ID: ${PROJECT_ID}"
+    else
+      echo "ERROR: Terraform outputs not available!"
+      exit 1
+    fi
+  working-directory: ./terraform
+
+- name: List All Clusters in Project
+  run: |
+    echo "=== All GKE Clusters in Project ==="
+    gcloud container clusters list \
+      --project=${{ steps.cluster_info.outputs.project_id }} \
+      --format="table(name,location,status)"
+
+- name: Wait for Cluster to be RUNNING
+  run: |
+    echo "Waiting for cluster to be ready..."
+    for i in {1..20}; do
+      STATUS=$(gcloud container clusters describe ${{ steps.cluster_info.outputs.cluster_name }} \
+        --zone=${{ steps.cluster_info.outputs.cluster_location }} \
+        --project=${{ steps.cluster_info.outputs.project_id }} \
+        --format="value(status)" 2>&1 || echo "NOT_FOUND")
+      
+      echo "Attempt $i/20: Cluster status = $STATUS"
+      
+      if [ "$STATUS" == "RUNNING" ]; then
+        echo "✓ Cluster is ready!"
+        break
+      fi
+      
+      if [ $i -eq 20 ]; then
+        echo "ERROR: Cluster did not become ready in time"
+        exit 1
+      fi
+      
+      sleep 30
+    done
+
+- name: Get GKE Credentials
+  run: |
+    gcloud container clusters get-credentials ${{ steps.cluster_info.outputs.cluster_name }} \
+      --zone=${{ steps.cluster_info.outputs.cluster_location }} \
+      --project=${{ steps.cluster_info.outputs.project_id }}
+Step 5: Check Terraform Outputs Exist
+Ensure your main.tf or outputs.tf has these:
+
+hcl
+output "cluster_name" {
+  value = google_container_cluster.primary.name
+}
+
+output "cluster_location" {
+  value = google_container_cluster.primary.location
+}
+
+output "project_id" {
+  value = var.project_id
+}
+Run this debug workflow and share the output from the "List All Clusters" and "Verify Cluster in Terraform State" steps. That will show us exactly what's happening.
+
+
+backend.tf
+9 lines
+
+text
+
+
+main.tf
+164 lines
+
+text
+
+
+outputs.tf
+52 lines
+
+text
+
+
+terraform.tfvars
+13 lines
+
+text
+
+
+variables.tf
+29 lines
+
+text
+
+
+cluster-health.yml
+56 lines
+
+yml
+
+
+promote-to-main.yml
+96 lines
+
+yml
+
+
+stage-validation.yml
+176 lines
+
+yml
+
+
+terraform-apply.yml
+71 lines
+
+yml
+
+
+terraform-destroy.yml
+105 lines
+
+yml
+
+
+terraform-plan.yml
+199 lines
+
+yml
+
+
+terraform-unlock.yml
+100 lines
+
+yml
+
+attached are my files pls verify
+
+I found the issue! In your terraform-apply.yml workflow, you're using the wrong flag for getting GKE credentials.
+
+The Problem
+Line 60 in terraform-apply.yml:
+
+yaml
+- name: Get GKE Credentials
+  run: |
+    gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
+      --zone ${{ secrets.GCP_REGION }} \    # ❌ WRONG: Using --zone with a region value
+      --project ${{ secrets.GCP_PROJECT_ID }}
+You're using --zone but passing ${{ secrets.GCP_REGION }} which is likely us-central1 (a region, not a zone).
+
+However, your Terraform creates a zonal cluster in us-central1-a (from your main.tf line 51: location = var.zone).
+
+The Fix
+Update terraform-apply.yml to use the actual zone instead of region:
+
+yaml
+- name: Get GKE Credentials
+  run: |
+    gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
+      --zone us-central1-a \
+      --project ${{ secrets.GCP_PROJECT_ID }}
+Better Solution: Use Terraform Outputs
+Since your cluster location comes from Terraform, extract it dynamically:
+
+Update terraform-apply.yml:
+
+yaml
+- name: Terraform Apply
+  run: terraform apply -auto-approve tfplan
+  working-directory: ${{ env.WORKING_DIR }}
+
+- name: Get Cluster Zone from Terraform
+  id: cluster_info
+  run: |
+    CLUSTER_ZONE=$(terraform output -raw zone)
+    CLUSTER_NAME=$(terraform output -raw cluster_name)
+    echo "zone=${CLUSTER_ZONE}" >> $GITHUB_OUTPUT
+    echo "name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
+    echo "Cluster: ${CLUSTER_NAME} in zone ${CLUSTER_ZONE}"
+  working-directory: ${{ env.WORKING_DIR }}
+
+- name: Get GKE Credentials
+  run: |
+    gcloud container clusters get-credentials ${{ steps.cluster_info.outputs.name }} \
+      --zone ${{ steps.cluster_info.outputs.zone }} \
+      --project ${{ secrets.GCP_PROJECT_ID }}
+Also Fix cluster-health.yml
+Your cluster-health.yml has the same issue on line 30:
+
+yaml
+- name: Get GKE Credentials
+  run: |
+    gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
+      --region ${{ secrets.GCP_REGION }} \    # ❌ Should be --zone
+      --project ${{ secrets.GCP_PROJECT_ID }}
+Fix it to:
+
+yaml
+- name: Get GKE Credentials
+  run: |
+    gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
+      --zone us-central1-a \
+      --project ${{ secrets.GCP_PROJECT_ID }}
+Summary of Required Changes
+terraform-apply.yml (line 60): Change --zone ${{ secrets.GCP_REGION }} to --zone us-central1-a
+cluster-health.yml (line 30): Change --region ${{ secrets.GCP_REGION }} to --zone us-central1-a
+Or create a new GitHub secret:
+
+Secret Name: GCP_ZONE
+Secret Value: us-central1-a
+Then use: --zone ${{ secrets.GCP_ZONE }}
+
+The cluster exists in zone us-central1-a, but you're trying to find it in region us-central1, which is why you get the 404 error.
+
+Invalid workflow file: .github/workflows/terraform-apply.yml#L17
+You have an error in your yaml syntax on line 17
+
+The issue is on line 17 of your terraform-apply.yml. Let me check the file again...
+
+Looking at your terraform-apply.yml, line 17 has:
+
+yaml
+environment: production  # GitHub environment for protection rules
+The Problem
+The environment key requires proper YAML syntax. It might be a spacing/indentation issue or your repository doesn't have a "production" environment configured.
+
+Solution 1: Remove or Comment Out the Environment (Quickest Fix)
+yaml
+jobs:
+  terraform-apply:
+    name: 'Terraform Apply'
+    runs-on: ubuntu-latest
+    # environment: production  # Commented out - add back after creating environment
+    permissions:
+      contents: read
+      id-token: write
+Solution 2: Use Correct Environment Syntax
+If you want to keep the environment protection:
+
+yaml
+jobs:
+  terraform-apply:
+    name: 'Terraform Apply'
+    runs-on: ubuntu-latest
+    environment: 
+      name: production
+    permissions:
+      contents: read
+      id-token: write
+Solution 3: Create the Environment in GitHub
+If you want environment protection rules:
+
+Go to your GitHub repository
+Click Settings → Environments
+Click New environment
+Name it: production
+Click Configure environment
+(Optional) Add protection rules like required reviewers
+Click Save protection rules
+Then use this syntax:
+
+yaml
+environment: production
+Here's the Complete Fixed terraform-apply.yml:
+yaml
+name: 'Terraform Apply'
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-*.yml'
+  workflow_dispatch:  # Manual trigger
+
+env:
+  TF_VERSION: '1.6.0'
+  WORKING_DIR: './terraform'
+
+jobs:
+  terraform-apply:
+    name: 'Terraform Apply'
+    runs-on: ubuntu-latest
+    # environment: production  # Temporarily disabled
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          token_format: 'access_token'
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Plan
+        run: |
+          terraform plan -input=false \
+            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="region=${{ secrets.GCP_REGION }}" \
+            -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
+            -out=tfplan
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Get Cluster Info from Terraform
+        id: cluster_info
+        run: |
+          CLUSTER_ZONE=$(terraform output -raw zone)
+          CLUSTER_NAME=$(terraform output -raw cluster_name)
+          echo "zone=${CLUSTER_ZONE}" >> $GITHUB_OUTPUT
+          echo "name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
+          echo "Cluster: ${CLUSTER_NAME} in zone ${CLUSTER_ZONE}"
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Get GKE Credentials
+        run: |
+          gcloud container clusters get-credentials ${{ steps.cluster_info.outputs.name }} \
+            --zone ${{ steps.cluster_info.outputs.zone }} \
+            --project ${{ secrets.GCP_PROJECT_ID }}
+Recommendation: Use Solution 1 (comment out the environment line) for now to get your workflow working. You can add environment protection later if needed.
+
+The same issue likely exists in terraform-destroy.yml on line 17 - fix it the same way.
+
+Invalid workflow file: .github/workflows/terraform-apply.yml#L17
+You have an error in your yaml syntax on line 17
+
+The YAML syntax error is likely due to invisible characters or formatting issues. Let me provide you with a completely clean version of the file.
+
+Replace your entire terraform-apply.yml with this:
+
+yaml
+name: 'Terraform Apply'
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-*.yml'
+  workflow_dispatch:
+
+env:
+  TF_VERSION: '1.6.0'
+  WORKING_DIR: './terraform'
+
+jobs:
+  terraform-apply:
+    name: 'Terraform Apply'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          token_format: 'access_token'
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Plan
+        run: |
+          terraform plan -input=false \
+            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="region=${{ secrets.GCP_REGION }}" \
+            -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
+            -out=tfplan
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Get Cluster Info from Terraform
+        id: cluster_info
+        run: |
+          CLUSTER_ZONE=$(terraform output -raw zone)
+          CLUSTER_NAME=$(terraform output -raw cluster_name)
+          echo "zone=${CLUSTER_ZONE}" >> $GITHUB_OUTPUT
+          echo "name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
+          echo "Cluster: ${CLUSTER_NAME} in zone ${CLUSTER_ZONE}"
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Get GKE Credentials
+        run: |
+          gcloud container clusters get-credentials ${{ steps.cluster_info.outputs.name }} \
+            --zone ${{ steps.cluster_info.outputs.zone }} \
+            --project ${{ secrets.GCP_PROJECT_ID }}
+Key changes made:
+
+Removed line 17 (environment: production) completely - this was causing the syntax error
+Fixed the get-credentials command to use the correct zone from Terraform outputs
+Removed commented lines that might have had formatting issues
+Clean YAML with proper indentation (2 spaces)
+To apply this fix:
+
+Delete your current .github/workflows/terraform-apply.yml
+Create a new file with the exact content above
+Commit and push
+Alternatively, you can edit directly on GitHub:
+
+Go to your repository on GitHub
+Navigate to .github/workflows/terraform-apply.yml
+Click the pencil icon to edit
+Replace entire content with the code above
+Commit changes
+This should resolve the YAML syntax error.
+
+its working, but can you explain me why its creating nodes again "Run terraform apply -auto-approve tfplan
+
+google_container_node_pool.primary_nodes: Destroying... [id=projects/***/locations/***-a/clusters/***/nodePools/***-node-pool]
+google_container_node_pool.primary_nodes: Still destroying... [id=projects/***/locations/us-cent...ter/nodePools/***-node-pool, 10s elapsed]
+google_container_node_pool.primary_nodes: Still destroying... [id=projects/***/locations/us-cent...ter/nodePools/***-node-pool, 20s elapsed]
+google_container_node_pool.primary_nodes: Still destroying... [id=projects/***/locations/us-cent...ter/nodePools/***-node-pool, 30s elapsed]
+google_container_node_pool.primary_nodes: Still destroying... [id=projects/***/locations/us-cent...ter/nodePools/***-node-pool, 40s elapsed]
+google_container_node_pool.primary_nodes: Still destroying... [id=projects/***/locations/us-cent...ter/nodePools/***-node-pool, 50s elapsed]
+google_container_node_pool.primary_nodes: Still destroying... [id=projects/***/locations/us-cent...ter/nodePools/***-node-pool, 1m0s elapsed]
+google_container_node_pool.primary_nodes: Still destroying... [id=projects/***/locations/us-cent...ter/nodePools/***-node-pool, 1m10s elapsed]
+google_container_node_pool.primary_nodes: Still destroying... [id=projects/***/locations/us-cent...ter/nodePools/***-node-pool, 1m20s elapsed]
+google_container_node_pool.primary_nodes: Still destroying... [id=projects/***/locations/us-cent...ter/nodePools/***-node-pool, 1m30s elapsed]"
+
+Show more
+Great question! Terraform is destroying and recreating your node pool because you made a change that requires replacement. This is happening due to a configuration drift or immutable field change.
+
+Why It's Recreating Nodes
+Looking at your files, here are the most likely reasons:
+
+Reason 1: Configuration Mismatch Between Files
+Your main.tf and terraform.tfvars have conflicting values:
+
+In main.tf (line 103):
+
+hcl
+machine_type = "e2-small"
+In terraform.tfvars (line 10):
+
+hcl
+machine_type = "e2-micro"
+When you applied Terraform previously, it might have used e2-micro, but now your main.tf is hardcoded to e2-small. Changing machine_type requires recreating the node pool because it's an immutable field.
+
+Reason 2: Preemptible Setting Change
+In main.tf (line 102):
+
+hcl
+preemptible = true
+In terraform.tfvars (line 13):
+
+hcl
+preemptible = true
+If this value changed between runs, it would cause a recreation.
+
+Reason 3: Node Count Mismatch
+In main.tf (line 100):
+
+hcl
+node_count = 2  # Hardcoded to 2
+In terraform.tfvars (line 11):
+
+hcl
+node_count = 1  # Set to 1
+The main.tf is hardcoded to 2, but your tfvars says 1. This causes Terraform to recreate the node pool.
+
+The Root Problem: Hardcoded Values
+Your main.tf has hardcoded values instead of using variables:
+
+hcl
+resource "google_container_node_pool" "primary_nodes" {
+  name       = "${var.cluster_name}-node-pool"
+  location   = var.zone
+  cluster    = google_container_cluster.primary.name
+  node_count = 2  # ❌ Hardcoded
+
+  node_config {
+    preemptible  = true  # ❌ Hardcoded
+    machine_type = "e2-small"  # ❌ Hardcoded, conflicts with tfvars
+    disk_size_gb = 30
+    disk_type    = "pd-standard"
+    # ...
+  }
+}
+The Fix: Use Variables Consistently
+Update your main.tf to use variables instead of hardcoded values:
+
+hcl
+resource "google_container_node_pool" "primary_nodes" {
+  name       = "${var.cluster_name}-node-pool"
+  location   = var.zone
+  cluster    = google_container_cluster.primary.name
+  node_count = var.node_count  # ✅ Use variable
+
+  node_config {
+    preemptible  = var.preemptible  # ✅ Use variable
+    machine_type = var.machine_type  # ✅ Use variable
+    disk_size_gb = 30
+    disk_type    = "pd-standard"
+
+    service_account = google_service_account.gke_nodes.email
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/cloud-platform"
+    ]
+
+    labels = {
+      env = var.environment
+    }
+
+    tags = ["gke-node", "${var.cluster_name}-gke"]
+
+    metadata = {
+      disable-legacy-endpoints = "true"
+    }
+
+    workload_metadata_config {
+      mode = "GKE_METADATA"
+    }
+  }
+
+  autoscaling {
+    min_node_count = var.min_node_count  # ✅ Use variable
+    max_node_count = var.max_node_count  # ✅ Use variable
+  }
+
+  management {
+    auto_repair  = true
+    auto_upgrade = true
+  }
+}
+Add missing variables to variables.tf:
+
+hcl
+variable "project_id" {
+  description = "GCP Project ID"
+  type        = string
+}
+
+variable "region" {
+  description = "GCP region"
+  type        = string
+  default     = "us-central1"
+}
+
+variable "zone" {
+  description = "GCP zone (single zone for cost savings)"
+  type        = string
+  default     = "us-central1-a"
+}
+
+variable "cluster_name" {
+  description = "GKE cluster name"
+  type        = string
+  default     = "my-gke-cluster"
+}
+
+variable "environment" {
+  description = "Environment (dev, staging, prod)"
+  type        = string
+  default     = "dev"
+}
+
+# Add these new variables
+variable "machine_type" {
+  description = "Machine type for nodes"
+  type        = string
+  default     = "e2-small"
+}
+
+variable "node_count" {
+  description = "Initial number of nodes"
+  type        = number
+  default     = 2
+}
+
+variable "min_node_count" {
+  description = "Minimum number of nodes for autoscaling"
+  type        = number
+  default     = 1
+}
+
+variable "max_node_count" {
+  description = "Maximum number of nodes for autoscaling"
+  type        = number
+  default     = 3
+}
+
+variable "preemptible" {
+  description = "Use preemptible nodes"
+  type        = bool
+  default     = true
+}
+Why This Happens
+When you run terraform apply:
+
+Terraform compares your current configuration with the existing state
+If it detects changes to immutable fields (like machine type), it must destroy and recreate the resource
+Fields that trigger recreation for node pools:
+machine_type
+preemptible
+disk_size_gb
+disk_type
+Service account
+OAuth scopes
+Checking What Changed
+To see what's causing the recreation, run:
+
+bash
+terraform plan -var="project_id=..." -var="region=..." -var="cluster_name=..."
+Look for lines with:
+
+-/+ destroy and then create replacement - indicates recreation
+The reason will be shown like: machine_type: "e2-micro" => "e2-small"
+Summary
+The node pool is being recreated because:
+
+Your main.tf has hardcoded machine_type = "e2-small"
+But it was previously created with e2-micro (from tfvars)
+GKE doesn't allow changing machine type on existing node pools
+So Terraform must destroy the old one and create a new one
+To prevent this in the future:
+
+Use variables consistently
+Don't hardcode values in main.tf
+Let terraform.tfvars be your single source of configuration truth
+Run terraform apply -auto-approve tfplan
+
+google_container_cluster.primary: Creating...
+╷
+│ Error: googleapi: Error 403: Permission denied on 'locations/***-a-a' (or it may not exist).
+│ Details:
+│ [
+│   {
+│     "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+│     "domain": "googleapis.com",
+│     "metadata": {
+│       "consumer": "projects/***",
+│       "location": "***-a-a",
+│       "service": "container.googleapis.com"
+│     },
+│     "reason": "LOCATION_POLICY_VIOLATED"
+│   },
+│   {
+│     "@type": "type.googleapis.com/google.rpc.LocalizedMessage",
+│     "locale": "en-US",
+│     "message": "Permission denied on 'locations/***-a-a' (or it may not exist)."
+│   }
+│ ]
+│ , forbidden
+│ 
+│   with google_container_cluster.primary,
+│   on main.tf line 44, in resource "google_container_cluster" "primary":
+│   44: resource "google_container_cluster" "primary"
+
+Show more
+The error shows locations/***-a-a - notice the double -a-a! This means the zone is being duplicated somehow.
+
+The Problem
+Your workflow is passing the zone twice, resulting in us-central1-a-a instead of us-central1-a.
+
+Looking at your workflow, the issue is likely in how you're passing variables to Terraform.
+
+The Root Cause
+In terraform-apply.yml, you have:
+
+yaml
+- name: Terraform Plan
+  run: |
+    terraform plan -input=false \
+      -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+      -var="region=${{ secrets.GCP_REGION }}" \
+      -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
+      -out=tfplan
+You're NOT passing the zone variable, so Terraform is using the default from variables.tf, BUT there might be a mismatch.
+
+Solution 1: Pass the Zone Explicitly
+Update your terraform-apply.yml:
+
+yaml
+- name: Terraform Plan
+  run: |
+    terraform plan -input=false \
+      -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+      -var="region=${{ secrets.GCP_REGION }}" \
+      -var="zone=us-central1-a" \
+      -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
+      -out=tfplan
+  working-directory: ${{ env.WORKING_DIR }}
+Solution 2: Create a GCP_ZONE Secret
+Go to GitHub repository → Settings → Secrets and variables → Actions
+Click New repository secret
+Name: GCP_ZONE
+Value: us-central1-a
+Click Add secret
+Then update terraform-apply.yml:
+
+yaml
+- name: Terraform Plan
+  run: |
+    terraform plan -input=false \
+      -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+      -var="region=${{ secrets.GCP_REGION }}" \
+      -var="zone=${{ secrets.GCP_ZONE }}" \
+      -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
+      -out=tfplan
+  working-directory: ${{ env.WORKING_DIR }}
+Solution 3: Check Your Secrets
+The zone duplication might be coming from your GCP_REGION secret. Check if:
+
+Your GCP_REGION secret value is: us-central1-a (wrong - this is a zone)
+
+It should be: us-central1 (correct - this is a region)
+
+To verify/fix:
+
+Go to GitHub → Settings → Secrets and variables → Actions
+Find GCP_REGION
+Click Update
+Ensure value is: us-central1 (NOT us-central1-a)
+Complete Fixed terraform-apply.yml
+yaml
+name: 'Terraform Apply'
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-*.yml'
+  workflow_dispatch:
+
+env:
+  TF_VERSION: '1.6.0'
+  WORKING_DIR: './terraform'
+
+jobs:
+  terraform-apply:
+    name: 'Terraform Apply'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          token_format: 'access_token'
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Plan
+        run: |
+          terraform plan -input=false \
+            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="region=${{ secrets.GCP_REGION }}" \
+            -var="zone=us-central1-a" \
+            -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
+            -out=tfplan
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Get Cluster Info from Terraform
+        id: cluster_info
+        run: |
+          CLUSTER_ZONE=$(terraform output -raw zone)
+          CLUSTER_NAME=$(terraform output -raw cluster_name)
+          echo "zone=${CLUSTER_ZONE}" >> $GITHUB_OUTPUT
+          echo "name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
+          echo "Cluster: ${CLUSTER_NAME} in zone ${CLUSTER_ZONE}"
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Get GKE Credentials
+        run: |
+          gcloud container clusters get-credentials ${{ steps.cluster_info.outputs.name }} \
+            --zone ${{ steps.cluster_info.outputs.zone }} \
+            --project ${{ secrets.GCP_PROJECT_ID }}
+Also Fix terraform-plan.yml
+Apply the same fix to your other workflows. In terraform-plan.yml (line 76):
+
+yaml
+- name: Terraform Plan
+  id: plan
+  run: |
+    terraform plan -no-color -input=false \
+      -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+      -var="region=${{ secrets.GCP_REGION }}" \
+      -var="zone=us-central1-a" \
+      -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
+      -out=tfplan
+  working-directory: ${{ env.WORKING_DIR }}
+  continue-on-error: true
+Debug: Check Your Secrets
+Run this debug step to see what values are being passed:
+
+yaml
+- name: Debug - Check Variables
+  run: |
+    echo "Project: ${{ secrets.GCP_PROJECT_ID }}"
+    echo "Region: ${{ secrets.GCP_REGION }}"
+    echo "Cluster: ${{ secrets.GKE_CLUSTER_NAME }}"
+Most likely: Your GCP_REGION secret contains us-central1-a instead of us-central1, and somewhere it's being concatenated with -a again.
+
+correct this "    - name: Terraform Plan
+        id: plan
+        run: |
+  terraform plan -no-color -input=false \
+       -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+      -var="region=${{ secrets.GCP_REGION }}" \
+      -var="zone=us-central1-a" \
+      -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
+      -out=tfplan
+      working-directory: ${{ env.WORKING_DIR }"
+
+Here's the corrected version with proper YAML syntax:
+
+yaml
+    - name: Terraform Plan
+      id: plan
+      run: |
+        terraform plan -no-color -input=false \
+          -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+          -var="region=${{ secrets.GCP_REGION }}" \
+          -var="zone=us-central1-a" \
+          -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
+          -out=tfplan
+      working-directory: ${{ env.WORKING_DIR }}
+Changes made:
+
+Fixed indentation (consistent 2 spaces per level)
+Moved working-directory outside the run block (it's a separate key, not part of the run command)
+Removed the extra quote at the end
+Aligned all the -var flags properly
+The structure is:
+
+yaml
+- name: Step Name
+  id: step_id
+  run: |
+    your commands here
+  working-directory: ./path
+
+name: 'Terraform Plan' on: push: branches: - stage # Trigger on push to stage branch paths: - 'terraform/**' - '.github/workflows/terraform-*.yml' pull_request: branches: - main - stage paths: - 'terraform/**' - '.github/workflows/terra
+
+pasted
+
+correct this ""
+
+Here's the corrected terraform-plan.yml file with proper indentation:
+
+yaml
 name: 'Terraform Plan'
 
 on:
@@ -70,6 +1520,7 @@ jobs:
           terraform plan -no-color -input=false \
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
+            -var="zone=us-central1-a" \
             -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
             -out=tfplan
         working-directory: ${{ env.WORKING_DIR }}
@@ -83,117 +1534,5 @@ jobs:
 
       - name: Upload Plan Artifact
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-plan-${{ github.sha }}
-          path: terraform/plan_output.txt
-          retention-days: 30
+        uses: actions/upload-a
 
-      - name: Comment PR (if PR event)
-        uses: actions/github-script@v7
-        if: github.event_name == 'pull_request'
-        env:
-          PLAN: ${{ steps.plan.outputs.stdout }}
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
-            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
-            #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
-            <details><summary>Validation Output</summary>
-
-            \`\`\`
-            ${{ steps.validate.outputs.stdout }}
-            \`\`\`
-
-            </details>
-
-            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
-
-            <details><summary>Show Plan</summary>
-
-            \`\`\`terraform
-            ${process.env.PLAN}
-            \`\`\`
-
-            </details>
-
-            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Branch: \`${{ github.ref_name }}\`, Workflow: \`${{ github.workflow }}\`*`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            })
-
-      - name: Create Issue Comment (if push to stage)
-        uses: actions/github-script@v7
-        if: github.event_name == 'push' && github.ref == 'refs/heads/stage'
-        env:
-          PLAN: ${{ steps.plan.outputs.stdout }}
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const planOutput = fs.readFileSync('terraform/plan_output.txt', 'utf8');
-            
-            const output = `## Terraform Plan - Stage Branch
-            
-            **Branch**: \`stage\`
-            **Commit**: \`${{ github.sha }}\`
-            **Author**: @${{ github.actor }}
-            **Triggered**: Push to stage branch
-            
-            #### Results:
-            - Format Check: \`${{ steps.fmt.outcome }}\`
-            - Initialization: \`${{ steps.init.outcome }}\`
-            - Validation: \`${{ steps.validate.outcome }}\`
-            - Plan: \`${{ steps.plan.outcome }}\`
-            
-            <details><summary>📋 View Full Plan Output</summary>
-            
-            \`\`\`terraform
-            ${planOutput.substring(0, 60000)}
-            \`\`\`
-            
-            </details>
-            
-            ---
-            **Next Steps**: 
-            - Review the plan above
-            - If approved, merge \`stage\` → \`main\` to apply changes
-            - [View Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-            `;
-
-            // Create or update issue
-            const issues = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              labels: 'terraform-plan,stage',
-              per_page: 1
-            });
-
-            if (issues.data.length > 0) {
-              // Update existing issue
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issues.data[0].number,
-                body: output
-              });
-            } else {
-              // Create new issue
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: `Terraform Plan Review - Stage Branch`,
-                body: output,
-                labels: ['terraform-plan', 'stage']
-              });
-            }
-
-      - name: Terraform Plan Status
-        if: steps.plan.outcome == 'failure'
-        run: exit 1

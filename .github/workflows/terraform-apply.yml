@@ -49,6 +49,7 @@ jobs:
           terraform plan -input=false \
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
+            -var="zone=us-central1-a" \
             -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
             -out=tfplan
         working-directory: ${{ env.WORKING_DIR }}
