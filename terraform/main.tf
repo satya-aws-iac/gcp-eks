@@ -166,11 +166,11 @@ resource "google_container_node_pool" "primary_nodes" {
   name       = "${var.cluster_name}-node-pool"
   location   = var.zone
   cluster    = google_container_cluster.primary.name
-  node_count = var.node_count  # ✅ Use variable
+  node_count = var.node_count # ✅ Use variable
 
   node_config {
     preemptible  = var.preemptible  # ✅ Use variable
-    machine_type = var.machine_type  # ✅ Use variable
+    machine_type = var.machine_type # ✅ Use variable
     disk_size_gb = 30
     disk_type    = "pd-standard"
 
@@ -195,8 +195,8 @@ resource "google_container_node_pool" "primary_nodes" {
   }
 
   autoscaling {
-    min_node_count = var.min_node_count  # ✅ Use variable
-    max_node_count = var.max_node_count  # ✅ Use variable
+    min_node_count = var.min_node_count # ✅ Use variable
+    max_node_count = var.max_node_count # ✅ Use variable
   }
 
   management {
