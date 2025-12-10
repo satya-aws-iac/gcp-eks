@@ -189,7 +189,7 @@ Configure these in: `Settings → Secrets and variables → Actions`
 |--------|-------------|---------|
 | `GCP_PROJECT_ID` | Your GCP project ID | `my-project-123` |
 | `GCP_SA_KEY` | Service account JSON key | `{"type": "service_account"...}` |
-| `GCP_REGION` | GCP region | `us-central1` |
+| `GCP_REGION` | GCP region | `us-central1-a` |
 | `GKE_CLUSTER_NAME` | Cluster name | `my-gke-cluster` |
 
 ## GitHub Environment Protection

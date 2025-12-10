@@ -123,7 +123,7 @@ gcloud auth login
 
 # Set your variables
 $PROJECT_ID = "your-project-id"  # Change this!
-$REGION = "us-central1"
+$REGION = "us-central1-a"
 $BILLING_ACCOUNT = "YOUR-BILLING-ACCOUNT-ID"
 
 # Create project
@@ -364,7 +364,7 @@ Write-Host "`n✅ GCP_WORKLOAD_IDENTITY_PROVIDER copied to clipboard!" -Foregrou
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | (from Step 3.5) |
 | `GCP_SERVICE_ACCOUNT` | `github-actions-gke@PROJECT_ID.iam.gserviceaccount.com` |
 | `GCP_PROJECT_ID` | Your project ID |
-| `GCP_REGION` | `us-central1` |
+| `GCP_REGION` | `us-central1-a` |
 | `GKE_CLUSTER_NAME` | `my-gke-cluster` |
 
 ---
@@ -400,7 +400,7 @@ variable "project_id" {
 variable "region" {
   description = "GCP region"
   type        = string
-  default     = "us-central1"
+  default     = "us-central1-a"
 }
 
 variable "cluster_name" {
@@ -874,7 +874,7 @@ git push origin main   # Deploy
 
 # Access cluster
 gcloud container clusters get-credentials my-gke-cluster `
-    --region us-central1 --project $PROJECT_ID
+    --region us-central1-a --project $PROJECT_ID
 kubectl get nodes
 
 # View workflows
