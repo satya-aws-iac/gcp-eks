@@ -161,3 +161,46 @@ resource "google_project_iam_member" "gke_nodes_resource_metadata_writer" {
   role    = "roles/stackdriver.resourceMetadata.writer"
   member  = "serviceAccount:${google_service_account.gke_nodes.email}"
 }
+
+resource "google_container_node_pool" "primary_nodes" {
+  name       = "${var.cluster_name}-node-pool"
+  location   = var.zone
+  cluster    = google_container_cluster.primary.name
+  node_count = var.node_count  # ✅ Use variable
+
+  node_config {
+    preemptible  = var.preemptible  # ✅ Use variable
+    machine_type = var.machine_type  # ✅ Use variable
+    disk_size_gb = 30
+    disk_type    = "pd-standard"
+
+    service_account = google_service_account.gke_nodes.email
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/cloud-platform"
+    ]
+
+    labels = {
+      env = var.environment
+    }
+
+    tags = ["gke-node", "${var.cluster_name}-gke"]
+
+    metadata = {
+      disable-legacy-endpoints = "true"
+    }
+
+    workload_metadata_config {
+      mode = "GKE_METADATA"
+    }
+  }
+
+  autoscaling {
+    min_node_count = var.min_node_count  # ✅ Use variable
+    max_node_count = var.max_node_count  # ✅ Use variable
+  }
+
+  management {
+    auto_repair  = true
+    auto_upgrade = true
+  }
+}
