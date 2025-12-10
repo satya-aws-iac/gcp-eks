@@ -1,9 +1,9 @@
-name: 'Terraform Plan'
+name: Terraform Plan
 
 on:
   push:
     branches:
-      - stage  # Trigger on push to stage branch
+      - stage
     paths:
       - 'terraform/**'
       - '.github/workflows/terraform-*.yml'
@@ -21,7 +21,7 @@ env:
 
 jobs:
   terraform-plan:
-    name: 'Terraform Plan'
+    name: Terraform Plan
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -70,6 +70,7 @@ jobs:
           terraform plan -no-color -input=false \
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
+            -var="zone=us-central1-a" \
             -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
             -out=tfplan
         working-directory: ${{ env.WORKING_DIR }}
@@ -89,7 +90,7 @@ jobs:
           path: terraform/plan_output.txt
           retention-days: 30
 
-      - name: Comment PR (if PR event)
+      - name: Comment PR
         uses: actions/github-script@v7
         if: github.event_name == 'pull_request'
         env:
@@ -97,9 +98,9 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
-            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
-            #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
+            const output = `#### Terraform Format and Style \`${{ steps.fmt.outcome }}\`
+            #### Terraform Initialization \`${{ steps.init.outcome }}\`
+            #### Terraform Validation \`${{ steps.validate.outcome }}\`
             <details><summary>Validation Output</summary>
 
             \`\`\`
@@ -108,7 +109,7 @@ jobs:
 
             </details>
 
-            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+            #### Terraform Plan \`${{ steps.plan.outcome }}\`
 
             <details><summary>Show Plan</summary>
 
@@ -127,7 +128,7 @@ jobs:
               body: output
             })
 
-      - name: Create Issue Comment (if push to stage)
+      - name: Create Issue Comment
         uses: actions/github-script@v7
         if: github.event_name == 'push' && github.ref == 'refs/heads/stage'
         env:
@@ -151,7 +152,7 @@ jobs:
             - Validation: \`${{ steps.validate.outcome }}\`
             - Plan: \`${{ steps.plan.outcome }}\`
             
-            <details><summary>📋 View Full Plan Output</summary>
+            <details><summary>View Full Plan Output</summary>
             
             \`\`\`terraform
             ${planOutput.substring(0, 60000)}
@@ -162,11 +163,10 @@ jobs:
             ---
             **Next Steps**: 
             - Review the plan above
-            - If approved, merge \`stage\` → \`main\` to apply changes
+            - If approved, merge \`stage\` to \`main\` to apply changes
             - [View Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
             `;
 
-            // Create or update issue
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -176,7 +176,6 @@ jobs:
             });
 
             if (issues.data.length > 0) {
-              // Update existing issue
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -184,11 +183,10 @@ jobs:
                 body: output
               });
             } else {
-              // Create new issue
               await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: `Terraform Plan Review - Stage Branch`,
+                title: 'Terraform Plan Review - Stage Branch',
                 body: output,
                 labels: ['terraform-plan', 'stage']
               });

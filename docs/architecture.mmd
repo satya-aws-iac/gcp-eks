@@ -1,0 +1,50 @@
+%% Mermaid diagram for gcp-eks repository
+%% Viewable in GitHub (Mermaid supported) or with mermaid-cli
+
+flowchart TD
+  Repo["Repository: gcp-eks"]
+  Repo --> TerraformDir["/terraform"]
+  Repo --> Workflows["/.github/workflows"]
+  Repo --> Scripts["mg.ps1 \n setup-github-oidc.ps1 \n other scripts"]
+
+  subgraph TerraformFolder [terraform]
+    direction TB
+    mainTF["main.tf\n(Cluster, Node Pool, VPC, Subnet)"]
+    variablesTF["variables.tf\n(vars: project_id, region, zone, cluster_name)"]
+    outputsTF["outputs.tf\n(cluster_name, endpoint, CA, etc)"]
+    backendTF["backend.tf\n(state backend config)"]
+  end
+
+  TerraformDir --> mainTF
+  TerraformDir --> variablesTF
+  TerraformDir --> outputsTF
+  TerraformDir --> backendTF
+
+  subgraph GKE [GKE Resources]
+    direction LR
+    VPC["VPC Network"]
+    Subnet["Subnetwork (pods/services ranges)"]
+    Cluster["google_container_cluster\n(primary)"]
+    NodePool["google_container_node_pool\n(primary_nodes)\n(node_count=2)"]
+    SA["google_service_account\n(gke_nodes)"]
+  end
+
+  mainTF --> VPC
+  mainTF --> Subnet
+  mainTF --> Cluster
+  mainTF --> NodePool
+  mainTF --> SA
+
+  Workflows --> Plan["terraform-plan.yml"]
+  Workflows --> Apply["terraform-apply.yml"]
+  Workflows --> Destroy["terraform-destroy.yml (or named)"]
+  Workflows --> StageValidation["stage-validation.yml"]
+
+  Plan --> TerraformCLI["Actions: terraform init/plan/apply"]
+  Apply --> TerraformCLI
+  Destroy --> TerraformCLI
+
+  Scripts --> mg["mg.ps1: migration helper\n(writes terraform files, creates backups)"]
+  Scripts --> oidc["setup-github-oidc.ps1: optional OIDC setup"]
+
+  Repo --- Docs["/docs (this file + PROJECT-STRUCTURE.md)\nMermaid diagram included"]

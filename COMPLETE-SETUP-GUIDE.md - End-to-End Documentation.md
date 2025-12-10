@@ -1,908 +1,863 @@
-# Complete Guide: GKE Cluster with GitHub Actions CI/CD
+# Complete Guide: Standard GKE Cluster with GitHub Actions CI/CD
 
 ## 📋 Table of Contents
 
-1. [Overview](#overview)
-2. [Prerequisites](#prerequisites)
-3. [Architecture](#architecture)
-4. [Part 1: GCP Project Setup](#part-1-gcp-project-setup)
-5. [Part 2: GitHub Repository Setup](#part-2-github-repository-setup)
-6. [Part 3: OIDC Authentication Setup](#part-3-oidc-authentication-setup)
-7. [Part 4: Terraform Configuration](#part-4-terraform-configuration)
-8. [Part 5: GitHub Actions Workflows](#part-5-github-actions-workflows)
-9. [Part 6: Testing & Deployment](#part-6-testing--deployment)
-10. [Part 7: Daily Operations](#part-7-daily-operations)
-11. [Troubleshooting](#troubleshooting)
-12. [Cost Optimization](#cost-optimization)
+1. [Current Setup Overview](#current-setup-overview)
+2. [Architecture](#architecture)
+3. [Prerequisites](#prerequisites)
+4. [Existing Configuration](#existing-configuration)
+5. [Daily Operations](#daily-operations)
+6. [Workflow Details](#workflow-details)
+7. [Managing Your Cluster](#managing-your-cluster)
+8. [Troubleshooting](#troubleshooting)
+9. [Cost Management](#cost-management)
+10. [Security & Best Practices](#security--best-practices)
 
 ---
 
-## Overview
+## Current Setup Overview
 
-### What We're Building
+### What You Have
 
-A fully automated GKE (Google Kubernetes Engine) cluster deployment using:
-- **Terraform** for Infrastructure as Code
-- **GitHub Actions** for CI/CD automation
-- **OIDC** for secure authentication (no service account keys!)
-- **GKE Autopilot** for cost-optimized Kubernetes
-- **Stage → Main workflow** for safe deployments
+✅ **Standard GKE Cluster** (Not Autopilot)
+- **Cluster Name**: `my-gke-cluster`
+- **Location**: `us-central1-a` (single zone)
+- **Nodes**: 2 nodes (can autoscale 1-3)
+- **Machine Type**: `e2-small` (2 vCPU, 2GB RAM)
+- **Disk**: 30GB standard disk per node
+- **Node Type**: Preemptible (80% cost savings)
+
+✅ **GitHub Actions CI/CD**
+- OIDC authentication (secure, no service account keys)
+- Stage → Main workflow for safe deployments
+- Automated plan on push to `stage`
+- Automated apply on push to `main`
+- Health checks every 6 hours
+
+✅ **Project Details**
+- **Project ID**: `satya-k8-poc`
+- **Region**: `us-central1`
+- **Zone**: `us-central1-a`
+- **Repository**: `satya-aws-iac/gcp-eks`
+- **Terraform State**: GCS bucket `satya-k8-poc-terraform-state`
 
 ### Key Features
 
-✅ **Secure**: OIDC authentication, no long-lived credentials
-✅ **Automated**: Push to deploy, no manual intervention
-✅ **Safe**: Test in stage before production
-✅ **Cost-Optimized**: GKE Autopilot, pay-per-pod model
-✅ **GitOps**: Infrastructure defined in code
-✅ **Auditable**: Full history in Git, workflow logs in GitHub
+🔐 **Security**
+- OIDC Workload Identity Federation (no keys stored)
+- Service account with least privilege
+- Workload Identity enabled on cluster
 
-### Final Architecture
+🚀 **Automation**
+- Push to `stage` → Terraform plan runs
+- Push to `main` → Infrastructure deployed
+- Scheduled health checks
+- One-click cluster destruction
+
+💰 **Cost Optimized**
+- Preemptible nodes (80% cheaper)
+- Single zone deployment
+- Small machine types (e2-small)
+- Autoscaling (1-3 nodes)
+
+---
+
+## Architecture
+
+### Infrastructure Flow
 
 ```
-┌─────────────┐
-│   GitHub    │
-│ Repository  │
-└──────┬──────┘
-       │
-       │ (Push to stage)
-       ▼
-┌─────────────┐
-│  Terraform  │
-│    Plan     │ ──► GitHub Issue (Review)
-└──────┬──────┘
-       │
-       │ (Merge to main)
-       ▼
-┌─────────────┐      ┌──────────────┐
-│  Terraform  │ ───► │  GCP Project │
-│    Apply    │      │  GKE Cluster │
-└─────────────┘      └──────────────┘
+┌─────────────────────────────────────────────────────┐
+│                  GitHub Repository                   │
+│              satya-aws-iac/gcp-eks                  │
+└────────────────┬────────────────────────────────────┘
+                 │
+                 │ Push to stage
+                 ▼
+┌─────────────────────────────────────────────────────┐
+│            Terraform Plan Workflow                   │
+│  • Validates configuration                          │
+│  • Runs terraform plan                              │
+│  • Creates GitHub issue with plan                   │
+└────────────────┬────────────────────────────────────┘
+                 │
+                 │ Review & Approve
+                 │ Merge to main
+                 ▼
+┌─────────────────────────────────────────────────────┐
+│           Terraform Apply Workflow                   │
+│  • Applies infrastructure changes                   │
+│  • Creates/updates GKE cluster                      │
+│  • Verifies cluster health                          │
+└────────────────┬────────────────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────────────────┐
+│              GCP Project: satya-k8-poc              │
+│  ┌──────────────────────────────────────────────┐  │
+│  │         GKE Cluster: my-gke-cluster          │  │
+│  │  Location: us-central1-a                     │  │
+│  │  Nodes: 2 x e2-small (preemptible)          │  │
+│  │  Network: VPC with secondary ranges          │  │
+│  └──────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+```
+
+### Network Architecture
+
+```
+VPC: my-gke-cluster-vpc
+├── Subnet: my-gke-cluster-subnet (10.0.0.0/24)
+│   ├── Primary: 10.0.0.0/24 (node IPs)
+│   ├── Pods: 10.1.0.0/16 (pod IPs)
+│   └── Services: 10.2.0.0/16 (service IPs)
+└── Node Pool: my-gke-cluster-node-pool
+    ├── Node 1: e2-small (preemptible)
+    └── Node 2: e2-small (preemptible)
 ```
 
 ---
 
 ## Prerequisites
 
-### Required Tools
+### Access Required
 
-Install these on your local machine:
+✅ **GCP Access**
+- Project: `satya-k8-poc`
+- Role: Owner or Editor
+- gcloud CLI configured
 
+✅ **GitHub Access**
+- Repository: `satya-aws-iac/gcp-eks`
+- Admin access to manage workflows
+
+✅ **Local Tools**
 ```powershell
-# PowerShell (Windows)
-# Install gcloud CLI
-# Download from: https://cloud.google.com/sdk/docs/install
-
-# Verify installation
-gcloud --version
-
-# Install Git
-# Download from: https://git-scm.com/downloads
-git --version
-
-# Install Terraform (optional, for local testing)
-# Download from: https://www.terraform.io/downloads
-terraform --version
+# Verify installations
+gcloud --version    # Google Cloud SDK
+kubectl version     # Kubernetes CLI
+git --version       # Git
+terraform --version # (optional) Terraform CLI
 ```
 
-### Required Accounts
+### GitHub Secrets (Already Configured)
 
-1. **Google Cloud Account**
-   - Active billing account
-   - Project with billing enabled
-   - Organization admin access (or project owner)
-
-2. **GitHub Account**
-   - Repository owner or admin access
-   - Ability to manage secrets and workflows
-
-### Required Permissions
-
-**GCP Permissions:**
-- Project Owner OR
-- These specific roles:
-  - Compute Admin
-  - Kubernetes Engine Admin
-  - Service Account Admin
-  - Storage Admin
-  - Workload Identity Pool Admin
-
-**GitHub Permissions:**
-- Repository admin access
-- Ability to manage Actions and Secrets
+| Secret Name | Value | Purpose |
+|-------------|-------|---------|
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | `projects/.../workloadIdentityPools/...` | OIDC authentication |
+| `GCP_SERVICE_ACCOUNT` | `github-actions-gke@satya-k8-poc.iam.gserviceaccount.com` | Service account email |
+| `GCP_PROJECT_ID` | `satya-k8-poc` | GCP project identifier |
+| `GCP_REGION` | `us-central1` | GCP region |
+| `GKE_CLUSTER_NAME` | `my-gke-cluster` | Cluster name |
 
 ---
 
-## Part 1: GCP Project Setup
+## Existing Configuration
 
-### Step 1.1: Create GCP Project
+### Terraform Files
 
-```powershell
-# Login to GCP
-gcloud auth login
+**`terraform/main.tf`**
+- Defines VPC network with secondary IP ranges
+- Creates standard GKE cluster (not Autopilot)
+- Configures node pool with 2 e2-small nodes
+- Sets up service account for nodes
+- Enables Workload Identity
 
-# Set your variables
-$PROJECT_ID = "your-project-id"  # Change this!
-$REGION = "us-central1-a"
-$BILLING_ACCOUNT = "YOUR-BILLING-ACCOUNT-ID"
-
-# Create project
-gcloud projects create $PROJECT_ID `
-    --name="GKE GitHub Actions Project"
-
-# Link billing account
-gcloud billing projects link $PROJECT_ID `
-    --billing-account=$BILLING_ACCOUNT
-
-# Set as default project
-gcloud config set project $PROJECT_ID
+**`terraform/variables.tf`**
+```hcl
+project_id     # GCP project ID
+region         # us-central1
+zone           # us-central1-a (single zone)
+cluster_name   # my-gke-cluster
+environment    # dev
 ```
 
-### Step 1.2: Enable Required APIs
+**`terraform/outputs.tf`**
+- Cluster name, endpoint, CA certificate
+- VPC and subnet names
+- Node pool details
+- Zone information
 
-```powershell
-# Enable all required GCP APIs
-$apis = @(
-    "container.googleapis.com",
-    "compute.googleapis.com",
-    "cloudresourcemanager.googleapis.com",
-    "iamcredentials.googleapis.com",
-    "sts.googleapis.com",
-    "storage.googleapis.com"
-)
+**`terraform/backend.tf`**
+- GCS backend for Terraform state
+- Bucket: `satya-k8-poc-terraform-state`
+- Prefix: `terraform/gke/state`
 
-foreach ($api in $apis) {
-    Write-Host "Enabling $api..." -ForegroundColor Yellow
-    gcloud services enable $api --project=$PROJECT_ID
-}
+### Workflow Files
 
-Write-Host "✅ All APIs enabled" -ForegroundColor Green
-```
+**`.github/workflows/terraform-plan.yml`**
+- Triggers: Push to `stage` branch or PRs to `main`/`stage`
+- Actions: Format check, init, validate, plan
+- Outputs: GitHub issue with plan details
 
-### Step 1.3: Create GCS Bucket for Terraform State
+**`.github/workflows/terraform-apply.yml`**
+- Triggers: Push to `main` branch
+- Actions: Plan, apply, get cluster credentials
+- Note: Has ordering issue (gets credentials before cluster exists)
 
-```powershell
-# Create bucket for Terraform state
-$BUCKET_NAME = "${PROJECT_ID}-terraform-state"
+**`.github/workflows/stage-validation.yml`**
+- Triggers: Push to `stage` or PRs to `stage`
+- Actions: Complete validation with security scan
+- Outputs: Detailed validation report
 
-gsutil mb -p $PROJECT_ID -l $REGION gs://$BUCKET_NAME
+**`.github/workflows/cluster-health.yml`**
+- Triggers: Every 6 hours or manual
+- Actions: Checks cluster, nodes, pods, services
+- Zone: Hardcoded to `us-central1-a`
 
-# Enable versioning for safety
-gsutil versioning set on gs://$BUCKET_NAME
+**`.github/workflows/terraform-destroy.yml`**
+- Triggers: Manual only (requires "destroy" confirmation)
+- Actions: Plans and applies destroy operation
+- Creates GitHub issue on completion
 
-Write-Host "✅ Terraform state bucket created: $BUCKET_NAME" -ForegroundColor Green
-```
+**`.github/workflows/terraform-unlock.yml`**
+- Triggers: Manual only
+- Actions: Removes Terraform state lock
+- Useful when workflow fails mid-execution
 
-### Step 1.4: Create Service Account
-
-```powershell
-# Create service account for GitHub Actions
-$SA_NAME = "github-actions-gke"
-$SA_EMAIL = "${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
-
-gcloud iam service-accounts create $SA_NAME `
-    --display-name="GitHub Actions GKE Service Account" `
-    --project=$PROJECT_ID
-
-Write-Host "✅ Service account created: $SA_EMAIL" -ForegroundColor Green
-```
-
-### Step 1.5: Grant IAM Permissions
-
-```powershell
-# Grant necessary roles to service account
-$roles = @(
-    "roles/container.admin",
-    "roles/compute.admin",
-    "roles/iam.serviceAccountUser",
-    "roles/storage.admin"
-)
-
-foreach ($role in $roles) {
-    Write-Host "Granting $role..." -ForegroundColor Yellow
-    gcloud projects add-iam-policy-binding $PROJECT_ID `
-        --member="serviceAccount:${SA_EMAIL}" `
-        --role=$role
-}
-
-Write-Host "✅ All permissions granted" -ForegroundColor Green
-```
+**`.github/workflows/promote-to-main.yml`**
+- Triggers: Manual only
+- Actions: Creates PR from `stage` to `main` or direct merge
+- Requires "promote" confirmation
 
 ---
 
-## Part 2: GitHub Repository Setup
-
-### Step 2.1: Create Repository
-
-```powershell
-# Option 1: Create via GitHub Web UI
-# Go to: https://github.com/new
-# Name: gke-infrastructure (or your choice)
-# Visibility: Private (recommended)
-# Initialize with README: Yes
-
-# Option 2: Create via CLI (if gh CLI installed)
-gh repo create gke-infrastructure --private --clone
-```
-
-### Step 2.2: Clone Repository Locally
-
-```powershell
-# Clone your repository
-git clone https://github.com/YOUR_USERNAME/gke-infrastructure.git
-cd gke-infrastructure
-
-# Create branch structure
-git checkout -b stage
-git push -u origin stage
-
-git checkout -b main
-git push -u origin main
-
-git checkout main
-```
-
-### Step 2.3: Create Directory Structure
-
-```powershell
-# Create directories
-New-Item -Path "terraform" -ItemType Directory
-New-Item -Path ".github/workflows" -ItemType Directory
-
-# Verify structure
-tree /F
-```
-
-Expected structure:
-```
-gke-infrastructure/
-├── .github/
-│   └── workflows/
-├── terraform/
-├── .gitignore
-└── README.md
-```
-
----
-
-## Part 3: OIDC Authentication Setup
-
-### Step 3.1: Get Project Number
-
-```powershell
-# Get your project number (needed for OIDC)
-$PROJECT_NUMBER = gcloud projects describe $PROJECT_ID --format="value(projectNumber)"
-Write-Host "Project Number: $PROJECT_NUMBER" -ForegroundColor Cyan
-```
-
-### Step 3.2: Create Workload Identity Pool
-
-```powershell
-# Create Workload Identity Pool
-$POOL_NAME = "github-actions-pool"
-
-gcloud iam workload-identity-pools create $POOL_NAME `
-    --project=$PROJECT_ID `
-    --location="global" `
-    --display-name="GitHub Actions Pool"
-
-Write-Host "✅ Workload Identity Pool created" -ForegroundColor Green
-```
-
-### Step 3.3: Create OIDC Provider
-
-```powershell
-# Set your GitHub details
-$GITHUB_ORG = "your-github-username"  # Change this!
-$GITHUB_REPO = "gke-infrastructure"    # Change if different
-
-# Create OIDC Provider
-$PROVIDER_NAME = "github-actions-provider"
-
-gcloud iam workload-identity-pools providers create-oidc $PROVIDER_NAME `
-    --project=$PROJECT_ID `
-    --location="global" `
-    --workload-identity-pool=$POOL_NAME `
-    --display-name="GitHub Actions Provider" `
-    --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner" `
-    --attribute-condition="assertion.repository_owner=='$GITHUB_ORG'" `
-    --issuer-uri="https://token.actions.githubusercontent.com"
-
-Write-Host "✅ OIDC Provider created" -ForegroundColor Green
-```
-
-### Step 3.4: Configure Workload Identity Binding
-
-```powershell
-# Allow GitHub Actions to impersonate service account
-$WORKLOAD_IDENTITY_PRINCIPAL = "principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL_NAME/attribute.repository/$GITHUB_ORG/$GITHUB_REPO"
-
-gcloud iam service-accounts add-iam-policy-binding $SA_EMAIL `
-    --project=$PROJECT_ID `
-    --role="roles/iam.workloadIdentityUser" `
-    --member="$WORKLOAD_IDENTITY_PRINCIPAL"
-
-Write-Host "✅ Workload Identity binding created" -ForegroundColor Green
-```
-
-### Step 3.5: Get Configuration Values for GitHub
-
-```powershell
-# Get the Workload Identity Provider resource name
-$WORKLOAD_IDENTITY_PROVIDER = "projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL_NAME/providers/$PROVIDER_NAME"
-
-Write-Host "`n════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "GitHub Secrets Configuration" -ForegroundColor Cyan
-Write-Host "════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "`nCopy these values to GitHub Secrets:" -ForegroundColor Yellow
-Write-Host "`n1. GCP_WORKLOAD_IDENTITY_PROVIDER" -ForegroundColor White
-Write-Host "   Value: $WORKLOAD_IDENTITY_PROVIDER" -ForegroundColor Gray
-Write-Host "`n2. GCP_SERVICE_ACCOUNT" -ForegroundColor White
-Write-Host "   Value: $SA_EMAIL" -ForegroundColor Gray
-Write-Host "`n3. GCP_PROJECT_ID" -ForegroundColor White
-Write-Host "   Value: $PROJECT_ID" -ForegroundColor Gray
-Write-Host "`n4. GCP_REGION" -ForegroundColor White
-Write-Host "   Value: $REGION" -ForegroundColor Gray
-Write-Host "`n5. GKE_CLUSTER_NAME" -ForegroundColor White
-Write-Host "   Value: my-gke-cluster" -ForegroundColor Gray
-Write-Host "`n════════════════════════════════════════════" -ForegroundColor Cyan
-
-# Copy provider to clipboard
-$WORKLOAD_IDENTITY_PROVIDER | Set-Clipboard
-Write-Host "`n✅ GCP_WORKLOAD_IDENTITY_PROVIDER copied to clipboard!" -ForegroundColor Green
-```
-
-### Step 3.6: Add Secrets to GitHub
-
-1. Go to your repository on GitHub
-2. Navigate to: **Settings → Secrets and variables → Actions**
-3. Click **New repository secret**
-4. Add each secret:
-
-| Secret Name | Value |
-|-------------|-------|
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | (from Step 3.5) |
-| `GCP_SERVICE_ACCOUNT` | `github-actions-gke@PROJECT_ID.iam.gserviceaccount.com` |
-| `GCP_PROJECT_ID` | Your project ID |
-| `GCP_REGION` | `us-central1-a` |
-| `GKE_CLUSTER_NAME` | `my-gke-cluster` |
-
----
-
-## Part 4: Terraform Configuration
-
-### Step 4.1: Create backend.tf
-
-```powershell
-cd terraform
-
-# Create backend.tf
-@"
-terraform {
-  backend "gcs" {
-    bucket = "$BUCKET_NAME"
-    prefix = "terraform/gke/state"
-  }
-}
-"@ | Out-File -FilePath backend.tf -Encoding UTF8
-```
-
-### Step 4.2: Create variables.tf
-
-```powershell
-# Create variables.tf
-@"
-variable "project_id" {
-  description = "GCP Project ID"
-  type        = string
-}
-
-variable "region" {
-  description = "GCP region"
-  type        = string
-  default     = "us-central1-a"
-}
-
-variable "cluster_name" {
-  description = "GKE cluster name"
-  type        = string
-  default     = "my-gke-cluster"
-}
-
-variable "environment" {
-  description = "Environment (dev, staging, prod)"
-  type        = string
-  default     = "dev"
-}
-"@ | Out-File -FilePath variables.tf -Encoding UTF8
-```
-
-### Step 4.3: Create main.tf (GKE Autopilot)
-
-```powershell
-# Create main.tf
-@"
-terraform {
-  required_version = ">= 1.0"
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "~> 5.0"
-    }
-  }
-}
-
-provider "google" {
-  project = var.project_id
-  region  = var.region
-}
-
-# VPC Network
-resource "google_compute_network" "vpc" {
-  name                    = "`${var.cluster_name}-vpc"
-  auto_create_subnetworks = false
-}
-
-# Subnet
-resource "google_compute_subnetwork" "subnet" {
-  name          = "`${var.cluster_name}-subnet"
-  ip_cidr_range = "10.0.0.0/24"
-  region        = var.region
-  network       = google_compute_network.vpc.id
-
-  secondary_ip_range {
-    range_name    = "pods"
-    ip_cidr_range = "10.1.0.0/16"
-  }
-
-  secondary_ip_range {
-    range_name    = "services"
-    ip_cidr_range = "10.2.0.0/16"
-  }
-}
-
-# GKE Autopilot Cluster
-resource "google_container_cluster" "autopilot" {
-  name                = var.cluster_name
-  location            = var.region
-  deletion_protection = false
-
-  # Enable Autopilot
-  enable_autopilot = true
-
-  network    = google_compute_network.vpc.name
-  subnetwork = google_compute_subnetwork.subnet.name
-
-  # IP allocation policy
-  ip_allocation_policy {
-    cluster_secondary_range_name  = "pods"
-    services_secondary_range_name = "services"
-  }
-
-  # Release channel
-  release_channel {
-    channel = "REGULAR"
-  }
-
-  # Maintenance window
-  maintenance_policy {
-    daily_maintenance_window {
-      start_time = "03:00"
-    }
-  }
-}
-"@ | Out-File -FilePath main.tf -Encoding UTF8
-```
-
-### Step 4.4: Create outputs.tf
-
-```powershell
-# Create outputs.tf
-@"
-output "cluster_name" {
-  description = "GKE Autopilot cluster name"
-  value       = google_container_cluster.autopilot.name
-}
-
-output "cluster_endpoint" {
-  description = "GKE cluster endpoint"
-  value       = google_container_cluster.autopilot.endpoint
-  sensitive   = true
-}
-
-output "cluster_ca_certificate" {
-  description = "GKE cluster CA certificate"
-  value       = google_container_cluster.autopilot.master_auth[0].cluster_ca_certificate
-  sensitive   = true
-}
-
-output "region" {
-  description = "GCP region"
-  value       = var.region
-}
-
-output "vpc_name" {
-  description = "VPC name"
-  value       = google_compute_network.vpc.name
-}
-
-output "subnet_name" {
-  description = "Subnet name"
-  value       = google_compute_subnetwork.subnet.name
-}
-"@ | Out-File -FilePath outputs.tf -Encoding UTF8
-```
-
----
-
-## Part 5: GitHub Actions Workflows
-
-### Step 5.1: Create terraform-plan.yml
-
-```powershell
-cd ../.github/workflows
-
-# Create terraform-plan.yml
-# (Copy content from your terraform-plan.yml file)
-```
-
-### Step 5.2: Create terraform-apply.yml
-
-```powershell
-# Create terraform-apply.yml
-# (Copy content from your terraform-apply.yml file)
-```
-
-### Step 5.3: Create stage-validation.yml
-
-```powershell
-# Create stage-validation.yml
-# (Copy content from your stage-validation.yml file)
-```
-
-### Step 5.4: Create Additional Workflows
-
-Create these additional workflow files:
-- `cluster-health.yml` - Periodic health checks
-- `terraform-destroy.yml` - Safe cluster deletion
-- `promote-to-main.yml` - Automated promotion workflow
-
-### Step 5.5: Create .gitignore
-
-```powershell
-cd ../..
-
-# Create .gitignore
-@"
-# Terraform
-**/.terraform/*
-*.tfstate
-*.tfstate.*
-*.tfvars
-!*.tfvars.example
-crash.log
-override.tf
-override.tf.json
-*_override.tf
-*_override.tf.json
-.terraformrc
-terraform.rc
-tfplan
-
-# GCP credentials
-*.json
-!package*.json
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-"@ | Out-File -FilePath .gitignore -Encoding UTF8
-```
-
----
-
-## Part 6: Testing & Deployment
-
-### Step 6.1: Commit Initial Configuration
-
-```powershell
-# Add all files
-git add .
-
-# Commit
-git commit -m "Initial GKE Terraform configuration with GitHub Actions"
-
-# Push to main
-git push origin main
-```
-
-### Step 6.2: Test in Stage Branch
-
-```powershell
-# Switch to stage branch
-git checkout stage
-
-# Merge main into stage
-git merge main
-
-# Push to trigger plan
-git push origin stage
-```
-
-### Step 6.3: Review Terraform Plan
-
-1. Go to your GitHub repository
-2. Click **Actions** tab
-3. Find the running "Terraform Plan" or "Stage Branch Validation" workflow
-4. Review the workflow output
-5. Check for any new GitHub Issues with plan details
-
-### Step 6.4: Deploy to Production
-
-If the plan looks good:
-
-```powershell
-# Option 1: Merge via GitHub UI
-# Create PR: stage → main
-# Review and merge
-
-# Option 2: Merge locally
-git checkout main
-git merge stage
-git push origin main
-```
-
-This will trigger the `terraform-apply.yml` workflow and create your GKE cluster!
-
-### Step 6.5: Verify Cluster Creation
-
-```powershell
-# Wait for workflow to complete (5-15 minutes)
-# Then verify cluster exists
-
-gcloud container clusters list --project=$PROJECT_ID
-
-# Get cluster credentials
-gcloud container clusters get-credentials my-gke-cluster `
-    --region $REGION `
-    --project $PROJECT_ID
-
-# Check cluster
-kubectl cluster-info
-kubectl get namespaces
-```
-
----
-
-## Part 7: Daily Operations
+## Daily Operations
 
 ### Making Infrastructure Changes
 
+#### Step 1: Create Feature Branch
+
 ```powershell
-# 1. Create feature branch
-git checkout -b feature/add-monitoring
+# Clone repository (if not already)
+git clone https://github.com/satya-aws-iac/gcp-eks.git
+cd gcp-eks
 
-# 2. Make changes to Terraform files
-# Edit terraform/main.tf, variables.tf, etc.
+# Create feature branch
+git checkout -b feature/add-node-labels
+```
 
-# 3. Commit changes
-git add .
-git commit -m "Add monitoring configuration"
-git push origin feature/add-monitoring
+#### Step 2: Make Changes
 
-# 4. Merge to stage for testing
+```powershell
+# Edit Terraform files
+notepad terraform/main.tf
+
+# Example: Add node labels
+# In node_config block:
+labels = {
+  env = var.environment
+  team = "platform"
+  app = "my-app"
+}
+```
+
+#### Step 3: Test in Stage
+
+```powershell
+# Commit changes
+git add terraform/
+git commit -m "Add node labels for better organization"
+
+# Push to feature branch
+git push origin feature/add-node-labels
+
+# Merge to stage for testing
 git checkout stage
-git merge feature/add-monitoring
+git merge feature/add-node-labels
 git push origin stage
+```
 
-# 5. Review plan in GitHub Actions/Issues
+#### Step 4: Review Plan
 
-# 6. If approved, merge to main
+1. Go to: https://github.com/satya-aws-iac/gcp-eks/actions
+2. Click on "Terraform Plan" or "Stage Branch Validation"
+3. Review the workflow output
+4. Check GitHub Issues for detailed plan
+
+#### Step 5: Deploy to Production
+
+```powershell
+# If plan looks good, merge to main
 git checkout main
 git merge stage
 git push origin main
+
+# Or use "Promote Stage to Main" workflow:
+# Actions → Promote Stage to Main → Run workflow → Type "promote"
+```
+
+### Accessing Your Cluster
+
+```powershell
+# Get cluster credentials
+gcloud container clusters get-credentials my-gke-cluster `
+    --zone us-central1-a `
+    --project satya-k8-poc
+
+# Verify access
+kubectl cluster-info
+kubectl get nodes
+kubectl get namespaces
+```
+
+### Deploying Applications
+
+```bash
+# Example: Deploy nginx
+kubectl create deployment nginx --image=nginx:latest --replicas=2
+
+# Expose as LoadBalancer
+kubectl expose deployment nginx --port=80 --type=LoadBalancer
+
+# Get external IP
+kubectl get svc nginx
+# Wait for EXTERNAL-IP to appear (takes 2-3 minutes)
+
+# Test
+curl http://EXTERNAL-IP
+```
+
+### Scaling Your Cluster
+
+#### Scale Nodes
+
+```bash
+# Scale to 3 nodes
+gcloud container clusters resize my-gke-cluster \
+    --num-nodes=3 \
+    --zone=us-central1-a \
+    --node-pool=my-gke-cluster-node-pool
+
+# Scale down to 1 node (save costs)
+gcloud container clusters resize my-gke-cluster \
+    --num-nodes=1 \
+    --zone=us-central1-a \
+    --node-pool=my-gke-cluster-node-pool
+```
+
+#### Scale Deployments
+
+```bash
+# Scale deployment
+kubectl scale deployment nginx --replicas=5
+
+# Check status
+kubectl get pods
 ```
 
 ### Monitoring Cluster Health
 
-The cluster health workflow runs automatically every 6 hours. To run manually:
+```powershell
+# Manual health check via workflow
+# Go to: Actions → GKE Cluster Health Check → Run workflow
 
-1. Go to **Actions** tab
-2. Select **GKE Cluster Health Check**
-3. Click **Run workflow**
+# Or check manually
+kubectl get nodes -o wide
+kubectl top nodes
+kubectl get pods --all-namespaces
+```
 
-### Destroying the Cluster
+---
 
-**⚠️ WARNING: This will delete everything!**
+## Workflow Details
+
+### Workflow: terraform-apply.yml (⚠️ Has Issue)
+
+**Current Issue:**
+The workflow tries to get cluster credentials BEFORE applying Terraform, which will fail on first run.
+
+**Current Order (Incorrect):**
+```yaml
+1. Checkout
+2. Setup Terraform
+3. Authenticate to GCP
+4. Setup gcloud CLI
+5. Terraform Init
+6. Terraform Plan
+7. Get GKE Credentials ❌ (cluster doesn't exist yet)
+8. Terraform Apply
+9. Get Cluster Info
+```
+
+**Correct Order Should Be:**
+```yaml
+1. Checkout
+2. Setup Terraform
+3. Authenticate to GCP
+4. Setup gcloud CLI
+5. Terraform Init
+6. Terraform Plan
+7. Terraform Apply
+8. Get Cluster Info from Terraform Outputs
+9. Get GKE Credentials ✅
+10. Verify Cluster
+```
+
+### Fix for terraform-apply.yml
+
+Replace the workflow with this corrected version:
+
+```yaml
+- name: Terraform Apply
+  run: terraform apply -auto-approve tfplan
+  working-directory: ${{ env.WORKING_DIR }}
+
+- name: Get Cluster Info from Terraform
+  id: cluster_info
+  run: |
+    CLUSTER_ZONE=$(terraform output -raw zone)
+    CLUSTER_NAME=$(terraform output -raw cluster_name)
+    echo "zone=${CLUSTER_ZONE}" >> $GITHUB_OUTPUT
+    echo "name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
+    echo "Cluster: ${CLUSTER_NAME} in zone ${CLUSTER_ZONE}"
+  working-directory: ${{ env.WORKING_DIR }}
+
+- name: Get GKE Credentials
+  run: |
+    gcloud container clusters get-credentials ${{ steps.cluster_info.outputs.name }} \
+      --zone ${{ steps.cluster_info.outputs.zone }} \
+      --project ${{ secrets.GCP_PROJECT_ID }}
+
+- name: Verify Cluster
+  run: |
+    echo "=== Cluster Info ==="
+    kubectl cluster-info
+    
+    echo -e "\n=== Nodes ==="
+    kubectl get nodes -o wide
+    
+    echo -e "\n=== Namespaces ==="
+    kubectl get namespaces
+```
+
+---
+
+## Managing Your Cluster
+
+### View Cluster Resources
+
+```bash
+# All resources
+kubectl get all --all-namespaces
+
+# Nodes
+kubectl get nodes -o wide
+
+# Pods
+kubectl get pods --all-namespaces
+
+# Services
+kubectl get services --all-namespaces
+
+# Resource usage
+kubectl top nodes
+kubectl top pods --all-namespaces
+```
+
+### Cluster Operations
+
+#### Upgrade Cluster
+
+```bash
+# Check available versions
+gcloud container get-server-config --zone=us-central1-a
+
+# Upgrade control plane
+gcloud container clusters upgrade my-gke-cluster \
+    --zone=us-central1-a \
+    --master \
+    --cluster-version=VERSION
+
+# Upgrade nodes
+gcloud container clusters upgrade my-gke-cluster \
+    --zone=us-central1-a \
+    --node-pool=my-gke-cluster-node-pool
+```
+
+#### Node Pool Operations
+
+```bash
+# Describe node pool
+gcloud container node-pools describe my-gke-cluster-node-pool \
+    --cluster=my-gke-cluster \
+    --zone=us-central1-a
+
+# Drain node (move pods off)
+kubectl drain NODE_NAME --ignore-daemonsets --delete-emptydir-data
+
+# Cordon node (prevent new pods)
+kubectl cordon NODE_NAME
+
+# Uncordon node
+kubectl uncordon NODE_NAME
+```
+
+### Destroy Cluster
 
 ```powershell
-# Option 1: Via GitHub Actions (Recommended)
-# 1. Go to Actions → Terraform Destroy
+# Via GitHub Actions (Recommended)
+# 1. Go to: Actions → Terraform Destroy
 # 2. Click "Run workflow"
 # 3. Type "destroy" to confirm
+# 4. Wait for completion
 
-# Option 2: Manually
+# Manually via Terraform
 cd terraform
-terraform destroy -var="project_id=$PROJECT_ID" -var="region=$REGION"
+terraform destroy `
+    -var="project_id=satya-k8-poc" `
+    -var="region=us-central1" `
+    -var="zone=us-central1-a" `
+    -var="cluster_name=my-gke-cluster"
 ```
 
 ---
 
 ## Troubleshooting
 
-### Issue: "Permission Denied" Errors
+### Common Issues
 
-**Solution:**
-```powershell
-# Verify service account permissions
-gcloud projects get-iam-policy $PROJECT_ID `
-    --flatten="bindings[].members" `
-    --filter="bindings.members:github-actions-gke@*"
+#### Issue 1: terraform-apply.yml Fails on First Run
 
-# Re-grant permissions if needed
-gcloud projects add-iam-policy-binding $PROJECT_ID `
-    --member="serviceAccount:$SA_EMAIL" `
-    --role="roles/container.admin"
+**Error:**
+```
+Error: getting credentials: Get "https://...": cluster not found
 ```
 
-### Issue: "Quota Exceeded" Errors
+**Cause:** Workflow tries to get credentials before cluster is created
+
+**Fix:** Update workflow as shown in "Fix for terraform-apply.yml" section above
+
+#### Issue 2: Preemptible Node Terminated
+
+**Symptom:** Node suddenly disappears, pods rescheduled
+
+**Explanation:** Preemptible nodes can be terminated by GCP with 30 seconds notice
 
 **Solution:**
-```powershell
-# Check quotas
-gcloud compute regions describe $REGION --format="yaml(quotas)"
+- This is normal behavior for preemptible nodes
+- Pods will automatically reschedule to other nodes
+- Use PodDisruptionBudgets for critical apps:
 
-# Request quota increase
-# Go to: https://console.cloud.google.com/iam-admin/quotas
-# Filter for the exceeded quota
-# Click "Edit Quotas" → Request increase
+```yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-app-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: my-app
 ```
 
-### Issue: "State Lock" Errors
+#### Issue 3: Out of Resources
+
+**Error:**
+```
+0/2 nodes available: insufficient memory/cpu
+```
+
+**Solutions:**
+
+1. **Scale up nodes:**
+```bash
+gcloud container clusters resize my-gke-cluster \
+    --num-nodes=3 \
+    --zone=us-central1-a \
+    --node-pool=my-gke-cluster-node-pool
+```
+
+2. **Reduce pod resource requests:**
+```yaml
+resources:
+  requests:
+    memory: "128Mi"  # Reduce from higher value
+    cpu: "100m"      # Reduce from higher value
+```
+
+3. **Delete unused workloads:**
+```bash
+kubectl delete deployment UNUSED_APP
+```
+
+#### Issue 4: Terraform State Locked
+
+**Error:**
+```
+Error: Error acquiring the state lock
+```
 
 **Solution:**
 ```powershell
-# Use the unlock workflow
-# Go to Actions → Terraform Unlock State → Run workflow
+# Use unlock workflow
+# Go to: Actions → Terraform Unlock State → Run workflow
 
-# Or manually:
+# Or manually
 cd terraform
 terraform force-unlock LOCK_ID
 ```
 
-### Issue: "OIDC Authentication Failed"
+#### Issue 5: OIDC Authentication Failed
+
+**Error:**
+```
+failed to generate Google Cloud access token
+```
 
 **Solution:**
 ```powershell
-# Verify Workload Identity Pool exists
-gcloud iam workload-identity-pools describe github-actions-pool `
-    --location=global `
-    --project=$PROJECT_ID
+# Verify Workload Identity Provider
+gcloud iam workload-identity-pools describe github-pool \
+    --location=global \
+    --project=satya-k8-poc
 
-# Verify provider exists
-gcloud iam workload-identity-pools providers describe github-actions-provider `
-    --location=global `
-    --workload-identity-pool=github-actions-pool `
-    --project=$PROJECT_ID
+# Verify service account binding
+gcloud iam service-accounts get-iam-policy \
+    github-actions-gke@satya-k8-poc.iam.gserviceaccount.com
+```
 
-# Check IAM binding
-gcloud iam service-accounts get-iam-policy $SA_EMAIL
+### Debug Commands
+
+```bash
+# Check cluster status
+gcloud container clusters describe my-gke-cluster \
+    --zone=us-central1-a
+
+# Check node status
+kubectl describe node NODE_NAME
+
+# Check pod events
+kubectl get events --sort-by='.lastTimestamp'
+
+# Check pod logs
+kubectl logs POD_NAME
+
+# Check workflow logs
+# Go to: https://github.com/satya-aws-iac/gcp-eks/actions
 ```
 
 ---
 
-## Cost Optimization
+## Cost Management
 
-### Current Setup Costs
+### Current Monthly Costs
 
-**GKE Autopilot:**
-- **Base**: ~$10-30/month (pay per pod)
-- **No management fee** (unlike standard GKE)
-- **Auto-scaling**: Only pay for what you use
-
-**Storage:**
-- **GCS Bucket** (Terraform state): ~$0.02/month
-- **Persistent Volumes**: ~$0.17/GB-month
-
-**Network:**
-- **Ingress**: Free
-- **Egress**: ~$0.12/GB (first 1GB/month free)
-
-### Total Estimated Cost: $10-40/month
-
-### Tips to Reduce Costs
-
-1. **Delete unused resources:**
-```powershell
-# List running workloads
-kubectl get pods --all-namespaces
-
-# Delete unused deployments
-kubectl delete deployment UNUSED_DEPLOYMENT
+**Breakdown:**
+```
+GKE Management Fee:    $73.00/month ($0.10/hour)
+2x e2-small nodes:     ~$15.00/month (preemptible)
+2x 30GB disks:         ~$6.00/month (standard)
+Network egress:        ~$2.00/month (varies)
+─────────────────────
+Total:                 ~$96.00/month
 ```
 
-2. **Set resource limits:**
+### Cost Optimization
+
+#### 1. Scale Down When Not in Use
+
+```bash
+# Nights/weekends, scale to 1 node
+gcloud container clusters resize my-gke-cluster \
+    --num-nodes=1 \
+    --zone=us-central1-a \
+    --node-pool=my-gke-cluster-node-pool
+
+# Savings: ~$7/month per node removed
+```
+
+#### 2. Delete Unused LoadBalancers
+
+```bash
+# List LoadBalancers (cost $18/month each!)
+kubectl get svc --all-namespaces -o wide | grep LoadBalancer
+
+# Delete unused
+kubectl delete svc UNUSED_LB_SERVICE
+```
+
+#### 3. Clean Up Unused Persistent Volumes
+
+```bash
+# List PVs
+kubectl get pv
+
+# Delete unused
+kubectl delete pvc UNUSED_PVC
+```
+
+#### 4. Monitor Costs
+
+```powershell
+# View current costs in GCP Console
+https://console.cloud.google.com/billing/
+
+# Set up budget alerts
+# Go to: Billing → Budgets & alerts
+# Create alert at $100/month
+```
+
+#### 5. Destroy When Not Needed
+
+```bash
+# Delete entire cluster to stop all costs
+# Actions → Terraform Destroy → Type "destroy"
+# Saves ~$96/month
+```
+
+---
+
+## Security & Best Practices
+
+### Security Features (Already Enabled)
+
+✅ **OIDC Authentication** - No service account keys stored
+✅ **Workload Identity** - Pods can assume GCP service accounts
+✅ **Private IPs** - Nodes use private IP addresses
+✅ **Minimal IAM** - Service account has only required permissions
+✅ **Automated Updates** - Nodes auto-repair and auto-upgrade
+
+### Best Practices
+
+#### 1. Resource Limits
+
+Always set resource limits:
+
 ```yaml
 resources:
   requests:
-    memory: "64Mi"
+    memory: "128Mi"
     cpu: "100m"
   limits:
-    memory: "128Mi"
+    memory: "256Mi"
     cpu: "200m"
 ```
 
-3. **Use preemptible nodes** (for non-critical workloads)
+#### 2. Use Namespaces
 
-4. **Monitor costs:**
-```powershell
-# View current costs
-gcloud billing accounts list
-gcloud billing projects describe $PROJECT_ID
+```bash
+# Create namespace
+kubectl create namespace production
+
+# Deploy to namespace
+kubectl create deployment nginx --image=nginx -n production
 ```
+
+#### 3. Use Secrets for Sensitive Data
+
+```bash
+# Create secret
+kubectl create secret generic db-password \
+    --from-literal=password=mypassword
+
+# Use in pod
+env:
+  - name: DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: db-password
+        key: password
+```
+
+#### 4. Regular Backups
+
+```bash
+# Backup deployments
+kubectl get deployments --all-namespaces -o yaml > deployments-backup.yaml
+
+# Backup services
+kubectl get services --all-namespaces -o yaml > services-backup.yaml
+```
+
+#### 5. Monitor & Alert
+
+```bash
+# Enable GKE monitoring
+gcloud container clusters update my-gke-cluster \
+    --enable-cloud-monitoring \
+    --zone=us-central1-a
+```
+
+---
+
+## Quick Reference
+
+### Important URLs
+
+- **GCP Console**: https://console.cloud.google.com
+- **GKE Clusters**: https://console.cloud.google.com/kubernetes/list?project=satya-k8-poc
+- **GitHub Repo**: https://github.com/satya-aws-iac/gcp-eks
+- **GitHub Actions**: https://github.com/satya-aws-iac/gcp-eks/actions
+- **Terraform State**: https://console.cloud.google.com/storage/browser/satya-k8-poc-terraform-state
+
+### Essential Commands
+
+```bash
+# Get cluster access
+gcloud container clusters get-credentials my-gke-cluster \
+    --zone us-central1-a --project satya-k8-poc
+
+# View resources
+kubectl get nodes
+kubectl get pods --all-namespaces
+kubectl get svc --all-namespaces
+
+# Deploy app
+kubectl create deployment my-app --image=my-image
+kubectl expose deployment my-app --port=80 --type=LoadBalancer
+
+# Scale cluster
+gcloud container clusters resize my-gke-cluster \
+    --num-nodes=3 --zone=us-central1-a \
+    --node-pool=my-gke-cluster-node-pool
+
+# Destroy cluster
+# Actions → Terraform Destroy → Type "destroy"
+```
+
+### Workflow Triggers
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| terraform-plan.yml | Push to `stage` | Plan infrastructure changes |
+| terraform-apply.yml | Push to `main` | Apply infrastructure changes |
+| stage-validation.yml | Push to `stage` | Full validation suite |
+| cluster-health.yml | Every 6 hours | Monitor cluster health |
+| terraform-destroy.yml | Manual | Destroy cluster |
+| terraform-unlock.yml | Manual | Unlock Terraform state |
+| promote-to-main.yml | Manual | Promote stage to main |
 
 ---
 
 ## Summary
 
-### What You've Built
+### What You Have
 
-✅ **Secure GKE Cluster** with Autopilot mode
-✅ **OIDC Authentication** (no service account keys)
+✅ **Production-ready GKE cluster** with 2 nodes
+✅ **Secure OIDC authentication** (no keys!)
 ✅ **Automated CI/CD** with GitHub Actions
-✅ **Safe Deployment** via stage → main workflow
-✅ **Infrastructure as Code** with Terraform
-✅ **Cost Optimized** setup
-
-### Key Commands Reference
-
-```powershell
-# Deploy changes
-git checkout stage
-git merge feature/my-change
-git push origin stage  # Test
-git checkout main
-git merge stage
-git push origin main   # Deploy
-
-# Access cluster
-gcloud container clusters get-credentials my-gke-cluster `
-    --region us-central1-a --project $PROJECT_ID
-kubectl get nodes
-
-# View workflows
-# Go to: https://github.com/YOUR_USERNAME/YOUR_REPO/actions
-
-# Destroy cluster
-# Actions → Terraform Destroy → Run workflow → Type "destroy"
-```
+✅ **Cost-optimized** ($96/month)
+✅ **Fully documented** setup
 
 ### Next Steps
 
-1. **Deploy Applications**: Create Kubernetes manifests
-2. **Add Monitoring**: Set up Cloud Monitoring
-3. **Configure DNS**: Set up Ingress and domain
-4. **Add CI/CD**: Build and deploy apps automatically
-5. **Implement Secrets**: Use Google Secret Manager
+1. **Deploy your applications** to the cluster
+2. **Set up monitoring** and alerting
+3. **Configure CI/CD** for your apps
+4. **Implement backup** strategy
+5. **Add more environments** (prod, staging, dev)
+
+### Getting Help
+
+- **GitHub Issues**: Check for plan outputs and errors
+- **Workflow Logs**: https://github.com/satya-aws-iac/gcp-eks/actions
+- **GKE Docs**: https://cloud.google.com/kubernetes-engine/docs
+- **Terraform Docs**: https://registry.terraform.io/providers/hashicorp/google/latest/docs
 
 ---
 
-## Additional Resources
-
-- [GKE Documentation](https://cloud.google.com/kubernetes-engine/docs)
-- [Terraform Google Provider](https://registry.terraform.io/providers/hashicorp/google/latest/docs)
-- [GitHub Actions Docs](https://docs.github.com/en/actions)
-- [Workload Identity Federation](https://cloud.google.com/iam/docs/workload-identity-federation)
-
----
-
-**Documentation Version**: 1.0
+**Documentation Version**: 2.0 - Updated for Standard GKE
 **Last Updated**: December 2024
-**Tested On**: Windows PowerShell, GCP, GitHub Actions
+**Project**: satya-k8-poc
+**Repository**: satya-aws-iac/gcp-eks
