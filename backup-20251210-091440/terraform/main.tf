@@ -43,8 +43,8 @@ resource "google_compute_subnetwork" "subnet" {
 
 # GKE Autopilot Cluster - Fully Managed
 resource "google_container_cluster" "autopilot" {
-  name     = var.cluster_name
-  location = var.region
+  name                = var.cluster_name
+  location            = var.region
   deletion_protection = false
 
   # Enable Autopilot

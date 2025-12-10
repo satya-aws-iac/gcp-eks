@@ -1,4 +1,4 @@
-﻿# Standard GKE Cluster with 2 Small Nodes
+# Standard GKE Cluster with 2 Small Nodes
 # Cost-optimized configuration for learning/development
 
 terraform {
@@ -44,8 +44,8 @@ resource "google_compute_subnetwork" "subnet" {
 resource "google_container_cluster" "primary" {
   name     = var.cluster_name
   location = var.zone
-  
-  deletion_protection = false
+
+  deletion_protection      = false
   remove_default_node_pool = true
   initial_node_count       = 1
 

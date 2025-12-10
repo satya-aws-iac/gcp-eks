@@ -1,4 +1,4 @@
-﻿variable "project_id" {
+variable "project_id" {
   description = "GCP Project ID"
   type        = string
 }
