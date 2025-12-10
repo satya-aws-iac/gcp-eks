@@ -1,8 +1,8 @@
-name: 'GKE Cluster Health Check'
+name: GKE Cluster Health Check
 
 on:
   schedule:
-    - cron: '0 */6 * * *'  # Every 6 hours
+    - cron: '0 */6 * * *'
   workflow_dispatch:
 
 jobs:
@@ -32,7 +32,7 @@ jobs:
       - name: Get GKE Credentials
         run: |
           gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
-            --zone  ${{ secrets.GCP_REGION }} \
+            --zone us-central1-a \
             --project ${{ secrets.GCP_PROJECT_ID }}
 
       - name: Check Cluster Status
