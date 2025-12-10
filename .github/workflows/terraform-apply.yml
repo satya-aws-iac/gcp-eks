@@ -7,7 +7,7 @@ on:
     paths:
       - 'terraform/**'
       - '.github/workflows/terraform-*.yml'
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
 
 env:
   TF_VERSION: '1.6.0'
@@ -17,7 +17,6 @@ jobs:
   terraform-apply:
     name: 'Terraform Apply'
     runs-on: ubuntu-latest
-    #environment: production  # GitHub environment for protection rules
     permissions:
       contents: read
       id-token: write
@@ -58,11 +57,18 @@ jobs:
         run: terraform apply -auto-approve tfplan
         working-directory: ${{ env.WORKING_DIR }}
 
-     - name: Get GKE Credentials
+      - name: Get Cluster Info from Terraform
+        id: cluster_info
         run: |
-          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
-            --zone ${{ secrets.GCP_REGION }} \
-            --project ${{ secrets.GCP_PROJECT_ID }}          
- 
+          CLUSTER_ZONE=$(terraform output -raw zone)
+          CLUSTER_NAME=$(terraform output -raw cluster_name)
+          echo "zone=${CLUSTER_ZONE}" >> $GITHUB_OUTPUT
+          echo "name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
+          echo "Cluster: ${CLUSTER_NAME} in zone ${CLUSTER_ZONE}"
+        working-directory: ${{ env.WORKING_DIR }}
 
- 
+      - name: Get GKE Credentials
+        run: |
+          gcloud container clusters get-credentials ${{ steps.cluster_info.outputs.name }} \
+            --zone ${{ steps.cluster_info.outputs.zone }} \
+            --project ${{ secrets.GCP_PROJECT_ID }}
