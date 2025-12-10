@@ -58,14 +58,11 @@ jobs:
         run: terraform apply -auto-approve tfplan
         working-directory: ${{ env.WORKING_DIR }}
 
-      - name: Get GKE Credentials
+     - name: Get GKE Credentials
         run: |
           gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
             --zone ${{ secrets.GCP_REGION }} \
-            --project ${{ secrets.GCP_PROJECT_ID }}
-
-      # - name: Terraform Destroy
-      #   run: terraform destroy -auto-approve
+            --project ${{ secrets.GCP_PROJECT_ID }}          
  
 
  
