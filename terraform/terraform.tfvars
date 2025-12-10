@@ -3,7 +3,6 @@
 
 project_id     = "satya-k8-poc"
 region         = "us-central1-a"
-zone           = "us-central1-a" # Single zone for cost savings
 cluster_name   = "my-gke-cluster"
 environment    = "dev"
 machine_type   = "e2-micro" # Free tier: 2 vCPU, 1GB RAM, 30GB disk
