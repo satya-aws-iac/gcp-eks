@@ -1,0 +1,96 @@
+name: 'Promote Stage to Main'
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_promotion:
+        description: 'Type "promote" to confirm'
+        required: true
+        type: string
+      create_pr:
+        description: 'Create PR instead of direct merge'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  promote:
+    name: 'Promote Stage to Main'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Validate Confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm_promotion }}" != "promote" ]; then
+            echo "❌ Promotion cancelled. You must type 'promote' to proceed."
+            exit 1
+          fi
+          echo "✅ Promotion confirmed"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: Check Stage Branch
+        run: |
+          git fetch origin stage
+          git checkout stage
+          
+          # Verify stage has latest changes
+          BEHIND=$(git rev-list --count stage..origin/stage)
+          if [ $BEHIND -gt 0 ]; then
+            echo "⚠️ Warning: Local stage is $BEHIND commits behind origin/stage"
+          fi
+
+      - name: Create Pull Request
+        if: github.event.inputs.create_pr == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: pr } = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚀 Promote Stage to Main',
+              head: 'stage',
+              base: 'main',
+              body: `## Promotion from Stage to Main
+              
+              This PR promotes all changes from \`stage\` branch to \`main\` for production deployment.
+              
+              ### Checklist
+              - [ ] Terraform plan reviewed in stage branch
+              - [ ] All tests passing
+              - [ ] Security scan completed
+              - [ ] Team approval obtained
+              - [ ] Ready for production deployment
+              
+              ### What happens after merge?
+              - Terraform apply will run automatically
+              - Changes will be applied to production GKE cluster
+              - GitHub issue will be created with results
+              
+              **Triggered by**: @${{ github.actor }}
+              **Date**: ${new Date().toISOString()}
+              `
+            });
+            
+            console.log(`Pull request created: ${pr.html_url}`);
+            core.summary.addRaw(`✅ Pull request created: [#${pr.number}](${pr.html_url})`).write();
+
+      - name: Direct Merge (if not creating PR)
+        if: github.event.inputs.create_pr == 'false'
+        run: |
+          echo "🚀 Merging stage into main directly..."
+          git checkout main
+          git merge stage -m "Promote stage to main"
+          git push origin main
+          echo "✅ Successfully merged stage into main"
+          echo "🔄 Terraform apply will run automatically"
