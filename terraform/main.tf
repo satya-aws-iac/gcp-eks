@@ -88,49 +88,49 @@ resource "google_container_cluster" "primary" {
   }
 }
 
-# Node Pool with 2 nodes
-resource "google_container_node_pool" "primary_nodes" {
-  name       = "${var.cluster_name}-node-pool"
-  location   = var.zone
-  cluster    = google_container_cluster.primary.name
-  node_count = 2
+# # Node Pool with 2 nodes
+# resource "google_container_node_pool" "primary_nodes" {
+#   name       = "${var.cluster_name}-node-pool"
+#   location   = var.zone
+#   cluster    = google_container_cluster.primary.name
+#   node_count = 2
 
-  node_config {
-    preemptible  = true
-    machine_type = "e2-small"
-    disk_size_gb = 30
-    disk_type    = "pd-standard"
+#   node_config {
+#     preemptible  = true
+#     machine_type = "e2-small"
+#     disk_size_gb = 30
+#     disk_type    = "pd-standard"
 
-    service_account = google_service_account.gke_nodes.email
-    oauth_scopes = [
-      "https://www.googleapis.com/auth/cloud-platform"
-    ]
+#     service_account = google_service_account.gke_nodes.email
+#     oauth_scopes = [
+#       "https://www.googleapis.com/auth/cloud-platform"
+#     ]
 
-    labels = {
-      env = var.environment
-    }
+#     labels = {
+#       env = var.environment
+#     }
 
-    tags = ["gke-node", "${var.cluster_name}-gke"]
+#     tags = ["gke-node", "${var.cluster_name}-gke"]
 
-    metadata = {
-      disable-legacy-endpoints = "true"
-    }
+#     metadata = {
+#       disable-legacy-endpoints = "true"
+#     }
 
-    workload_metadata_config {
-      mode = "GKE_METADATA"
-    }
-  }
+#     workload_metadata_config {
+#       mode = "GKE_METADATA"
+#     }
+#   }
 
-  autoscaling {
-    min_node_count = 1
-    max_node_count = 3
-  }
+#   autoscaling {
+#     min_node_count = 1
+#     max_node_count = 3
+#   }
 
-  management {
-    auto_repair  = true
-    auto_upgrade = true
-  }
-}
+#   management {
+#     auto_repair  = true
+#     auto_upgrade = true
+#   }
+# }
 
 # Service Account for nodes
 resource "google_service_account" "gke_nodes" {
