@@ -3,6 +3,11 @@ output "cluster_name" {
   value       = google_container_cluster.primary.name
 }
 
+output "project_id" {
+  description = "GCP project id"
+  value       = var.project_id
+}
+
 output "cluster_endpoint" {
   description = "GKE cluster endpoint"
   value       = google_container_cluster.primary.endpoint

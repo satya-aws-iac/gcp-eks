@@ -1,0 +1,34 @@
+# Helper: get GKE credentials using Terraform outputs (PowerShell)
+# Run this from the `terraform` directory after `terraform apply` or when state exists.
+
+try {
+  $tf = terraform output -json | ConvertFrom-Json
+} catch {
+  Write-Error "Failed to read Terraform outputs. Run this from the terraform folder and ensure state exists."
+  exit 1
+}
+
+$cluster = $tf.cluster_name.value
+$zone    = $tf.zone.value
+$region  = $tf.region.value
+$project = $tf.project_id.value
+
+if ([string]::IsNullOrEmpty($cluster)) {
+  Write-Error "cluster_name output is empty. Ensure the cluster exists and Terraform state is available."
+  exit 1
+}
+
+if (-not [string]::IsNullOrEmpty($zone)) {
+  Write-Output "Running: gcloud container clusters get-credentials $cluster --zone $zone --project $project"
+  gcloud container clusters get-credentials $cluster --zone $zone --project $project
+  exit $LASTEXITCODE
+}
+
+if (-not [string]::IsNullOrEmpty($region)) {
+  Write-Output "Running: gcloud container clusters get-credentials $cluster --region $region --project $project"
+  gcloud container clusters get-credentials $cluster --region $region --project $project
+  exit $LASTEXITCODE
+}
+
+Write-Error "Neither zone nor region output is set. Update Terraform outputs or provide location flags manually."
+exit 1
