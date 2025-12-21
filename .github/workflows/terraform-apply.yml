@@ -39,6 +39,12 @@ jobs:
 
       - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Plan
         run: |
           terraform plan -input=false \
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
@@ -47,12 +53,6 @@ jobs:
             -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
             -out=tfplan
         working-directory: ${{ env.WORKING_DIR }}
-
-      - name: Get GKE Credentials
-        run: |
-            gcloud container clusters get-credentials ${{ steps.cluster_info.outputs.name }} \
-            --zone ${{ steps.cluster_info.outputs.zone }} \
-            --project ${{ secrets.GCP_PROJECT_ID }}
 
 
       - name: Terraform Apply
