@@ -6,13 +6,13 @@ variable "project_id" {
 variable "region" {
   description = "GCP region"
   type        = string
-  default     = "us-central1-a"
+  default     = "us-central1"
 }
 
 variable "zone" {
   description = "GCP zone (single zone for cost savings)"
   type        = string
-  default     = "us-central1-a-a"
+  default     = "us-central1-a"
 }
 
 variable "cluster_name" {
@@ -25,4 +25,35 @@ variable "environment" {
   description = "Environment (dev, staging, prod)"
   type        = string
   default     = "dev"
+}
+
+# Add these new variables
+variable "machine_type" {
+  description = "Machine type for nodes"
+  type        = string
+  default     = "e2-small"
+}
+
+variable "node_count" {
+  description = "Initial number of nodes"
+  type        = number
+  default     = 2
+}
+
+variable "min_node_count" {
+  description = "Minimum number of nodes for autoscaling"
+  type        = number
+  default     = 1
+}
+
+variable "max_node_count" {
+  description = "Maximum number of nodes for autoscaling"
+  type        = number
+  default     = 3
+}
+
+variable "preemptible" {
+  description = "Use preemptible nodes"
+  type        = bool
+  default     = true
 }

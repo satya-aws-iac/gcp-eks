@@ -75,4 +75,4 @@ jobs:
           echo "Cluster: ${CLUSTER_NAME} in zone ${CLUSTER_ZONE}"
         working-directory: ${{ env.WORKING_DIR }}
 
-     
+
