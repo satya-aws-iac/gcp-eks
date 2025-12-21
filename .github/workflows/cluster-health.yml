@@ -29,12 +29,6 @@ jobs:
       - name: Set GKE Auth Plugin Environment
         run: echo "USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> $GITHUB_ENV
 
-      - name: Get GKE Credentials
-        run: |
-          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
-            --zone us-central1-a \
-            --project ${{ secrets.GCP_PROJECT_ID }}
-
       - name: Check Cluster Status
         run: |
           echo "=== Cluster Info ==="
