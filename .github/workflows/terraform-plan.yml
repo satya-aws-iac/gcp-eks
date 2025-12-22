@@ -42,8 +42,30 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          # IMPORTANT: when using workload identity, `service_account` must be the service account EMAIL
+          # e.g. "my-sa@project.iam.gserviceaccount.com". Ensure you set a secret named GCP_SERVICE_ACCOUNT_EMAIL
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
           token_format: 'access_token'
+
+      - name: Debug GCP auth input
+        run: |
+          echo "Checking GCP_SERVICE_ACCOUNT secret format..."
+          # If the secret is JSON with a client_email field we'll print that; otherwise print a masked summary.
+          if command -v jq >/dev/null 2>&1; then
+            if jq -r .client_email <<< "$GCP_SERVICE_ACCOUNT" >/dev/null 2>&1; then
+              echo "GCP_SERVICE_ACCOUNT appears to be a JSON key file with client_email: $(jq -r .client_email <<< "$GCP_SERVICE_ACCOUNT")"
+            else
+              echo "GCP_SERVICE_ACCOUNT does not look like a JSON key file; length: ${#GCP_SERVICE_ACCOUNT} (masked)"
+            fi
+          else
+            python - <<'PY'
+import json, os
+s = os.environ.get('GCP_SERVICE_ACCOUNT', '')
+try:
+  print('GCP_SERVICE_ACCOUNT is JSON with client_email:', json.loads(s)['client_email'])
+except Exception:
+  print('GCP_SERVICE_ACCOUNT does not appear to be JSON; length:', len(s))
+PY
 
       - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
