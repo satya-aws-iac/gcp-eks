@@ -27,6 +27,26 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Debug Google auth
+        run: |
+          echo "Credentials path: $GOOGLE_GHA_CREDS_PATH"
+          if command -v jq >/dev/null 2>&1; then
+            jq -r .client_email "$GOOGLE_GHA_CREDS_PATH" || true
+          else
+            python - <<'PY'
+import json,os
+try:
+  print(json.load(open(os.environ['GOOGLE_GHA_CREDS_PATH']))['client_email'])
+except Exception as e:
+  print('failed to parse creds:', e)
+PY
+          fi
+
+          gcloud auth list || true
+          gcloud config list || true
+          gcloud services list --enabled --project="${{ env.PROJECT_ID }}" | grep iamcredentials || true
+          gcloud iam service-accounts list --project="${{ env.PROJECT_ID }}" || true
+
       - name: Configure Docker for Artifact Registry
         run: |
           gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
