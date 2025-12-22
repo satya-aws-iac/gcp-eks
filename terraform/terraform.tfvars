@@ -2,11 +2,11 @@
 # DO NOT commit terraform.tfvars to git - add it to .gitignore
 
 project_id     = "satya-k8-poc"
-region         = "us-central1-a"
+region         = "us-central1"
 cluster_name   = "my-gke-cluster"
 environment    = "dev"
-machine_type   = "e2-micro" # Free tier: 2 vCPU, 1GB RAM, 30GB disk
-node_count     = 1          # Start with 1 node
-min_node_count = 1
-max_node_count = 3    # Max 3 nodes
-preemptible    = true # Use preemptible for 80% cost savings
+machine_type   = "e2-medium" # 2 vCPU, 4 GB RAM
+node_count     = 2
+min_node_count = 2
+max_node_count = 2
+preemptible    = true # Use preemptible for cost savings
