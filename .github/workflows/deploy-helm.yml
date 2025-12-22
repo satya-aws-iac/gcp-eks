@@ -14,49 +14,41 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    ...existing code...
+    env:
+      GKE_CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
+      GKE_LOCATION: ${{ env.REGION }}
+      # Optional: set DOCKERFILE_PATH if your Dockerfile is not at the repo root
+      DOCKERFILE_PATH: Dockerfile
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      # Use service account key authentication
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Configure Docker for Artifact Registry
-        run: |
-          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+      ...existing code...
 
       - name: Build and Push Docker image
         run: |
+          if [ ! -f "${DOCKERFILE_PATH}" ]; then
+            echo "Dockerfile not found at '${DOCKERFILE_PATH}'"
+            echo "Repository files:"
+            ls -R
+            exit 1
+          fi
+
           IMAGE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
           IMAGE_LATEST="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest"
-          
-          docker build -t $IMAGE_TAG -t $IMAGE_LATEST .
+
+          docker build -f "${DOCKERFILE_PATH}" -t $IMAGE_TAG -t $IMAGE_LATEST .
           docker push $IMAGE_TAG
           docker push $IMAGE_LATEST
-          
+
           echo "✅ Image pushed successfully!"
           echo "📦 Image: $IMAGE_LATEST"
+      ...existing code...
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v2
         with:
-         cluster_name: ${{ secrets.GKE_CLUSTER_NAME }}
-         location: ${{ secrets.GCP_REGION }}
-
-      - name: Setup Helm
-        uses: azure/setup-helm@v3
-
-      - name: Deploy Helm chart to GKE
-        run: |
-          helm upgrade --install aws-cloud-projects-site learn-k8/helm-chart \
-            --namespace learn-master --create-namespace \
-            --set image.repository=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }} \
-            --set image.tag=${{ github.sha }} \
-            --wait
+          cluster_name: ${{ env.GKE_CLUSTER_NAME }}
+          location: ${{ env.GKE_LOCATION }}
+      ...existing code...
