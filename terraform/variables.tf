@@ -31,7 +31,7 @@ variable "environment" {
 variable "machine_type" {
   description = "Machine type for nodes"
   type        = string
-  default     = "e2-small"
+  default     = "e2-medium"
 }
 
 variable "node_count" {
