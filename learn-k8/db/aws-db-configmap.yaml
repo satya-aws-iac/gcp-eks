@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+data:
+  # Non-sensitive configuration values for Postgres
+  POSTGRES_DB: sampledb
+  # Example of additional flags you might want to pass to the server (application-specific)
+  PG_EXTRA_OPTS: "-c fsync=on"

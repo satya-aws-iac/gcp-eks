@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sample-app
+  template:
+    metadata:
+      labels:
+        app: sample-app
+    spec:
+      containers:
+      - name: sample-container
+        image: nginx:stable
+        ports:
+        - containerPort: 80
+        envFrom:
+        - configMapRef:
+            name: sample-config
+        - secretRef:
+            name: sample-secret
+        volumeMounts:
+        - name: secret-volume
+          mountPath: /etc/credentials
+          readOnly: true
+      volumes:
+      - name: secret-volume
+        secret:
+          secretName: sample-secret
+          items:
+          - key: DB_USERNAME
+            path: username
+          - key: DB_PASSWORD
+            path: password
