@@ -1,0 +1,11 @@
+replicaCount: 2
+
+image:
+  repository: gcr.io/your-project/my-app
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 80
+
+resources: {}
