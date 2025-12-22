@@ -17,7 +17,7 @@ jobs:
     env:
       GKE_CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
       GKE_LOCATION: ${{ env.REGION }}
-      DOCKERFILE_PATH: Dockerfile
+      DOCKERFILE_PATH: learn-k8/Dockerfile
 
     steps:
       - name: Checkout code
@@ -47,7 +47,7 @@ jobs:
           IMAGE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
           IMAGE_LATEST="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest"
 
-          docker build -f "${DOCKERFILE_PATH}" -t $IMAGE_TAG -t $IMAGE_LATEST .
+          docker build -f "${DOCKERFILE_PATH}" -t $IMAGE_TAG -t $IMAGE_LATEST $(dirname "${DOCKERFILE_PATH}")
           docker push $IMAGE_TAG
           docker push $IMAGE_LATEST
 
