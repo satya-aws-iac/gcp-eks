@@ -166,7 +166,7 @@ resource "google_container_node_pool" "primary_nodes" {
   name       = "${var.cluster_name}-node-pool"
   location   = var.zone
   cluster    = google_container_cluster.primary.name
-  node_count = 2
+  node_count = var.node_count
 
   node_config {
     preemptible  = var.preemptible  # ✅ Use variable
@@ -195,9 +195,9 @@ resource "google_container_node_pool" "primary_nodes" {
   }
 
   autoscaling {
-    # Enforce fixed-size pool of 2 nodes
-    min_node_count = 2
-    max_node_count = 2
+    # Allow Cluster Autoscaler to scale, with minimum 2 nodes
+    min_node_count = var.min_node_count
+    max_node_count = var.max_node_count
   }
 
   management {
