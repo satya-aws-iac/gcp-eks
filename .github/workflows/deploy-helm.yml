@@ -45,6 +45,7 @@ jobs:
 
       - name: Deploy Helm chart
         run: |
-          helm upgrade --install my-app $HELM_CHART_PATH \
-            --set image.repository=gcr.io/${{ secrets.GCP_PROJECT }}/${{ env.IMAGE_NAME }} \
+          helm upgrade --install aws-cloud-projects-site $HELM_CHART_PATH \
+            --namespace learn-master --create-namespace \
+            --set image.repository=us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/satya-gcr/aws-cloud-projects-site \
             --set image.tag=${{ github.sha }} --wait

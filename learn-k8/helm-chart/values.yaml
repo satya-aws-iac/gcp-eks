@@ -1,11 +1,24 @@
 replicaCount: 2
 
+# Namespace to deploy into. Helm normally uses the release namespace,
+# but templates will default to this value when set.
+namespace: learn-master
+
 image:
-  repository: gcr.io/your-project/my-app
+  repository: us-central1-docker.pkg.dev/satya-k8-poc/satya-gcr/aws-cloud-projects-site
   tag: "latest"
 
 service:
   type: ClusterIP
   port: 80
 
-resources: {}
+
+
+# Default resource requests/limits for the container. Adjust as needed.
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
