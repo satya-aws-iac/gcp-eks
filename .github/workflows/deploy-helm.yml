@@ -1,0 +1,51 @@
+name: Build, Push and Deploy Helm chart to GKE
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_NAME: my-app
+      HELM_CHART_PATH: learn-k8/helm-chart
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT }}
+
+      - name: Configure Docker for gcr
+        run: |-
+          gcloud auth configure-docker --quiet
+
+      - name: Build and push image to GCR
+        uses: docker/build-push-action@v4
+        with:
+          context: ./learn-k8
+          push: true
+          tags: gcr.io/${{ secrets.GCP_PROJECT }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v1
+        with:
+          cluster_name: ${{ secrets.GKE_CLUSTER }}
+          location: ${{ secrets.GKE_LOCATION }}
+          project_id: ${{ secrets.GCP_PROJECT }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+
+      - name: Deploy Helm chart
+        run: |
+          helm upgrade --install aws-cloud-projects-site $HELM_CHART_PATH \
+            --namespace learn-master --create-namespace \
+            --set image.repository=us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/satya-gcr/aws-cloud-projects-site \
+            --set image.tag=${{ github.sha }} --wait
