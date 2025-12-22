@@ -14,12 +14,15 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      GKE_CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
+      GKE_LOCATION: ${{ env.REGION }}
+      DOCKERFILE_PATH: Dockerfile
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Use service account key authentication
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -34,29 +37,33 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
+          if [ ! -f "${DOCKERFILE_PATH}" ]; then
+            echo "Dockerfile not found at '${DOCKERFILE_PATH}'"
+            echo "Repository files:"
+            ls -R
+            exit 1
+          fi
+
           IMAGE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
           IMAGE_LATEST="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest"
-          
-          docker build -t $IMAGE_TAG -t $IMAGE_LATEST .
+
+          docker build -f "${DOCKERFILE_PATH}" -t $IMAGE_TAG -t $IMAGE_LATEST .
           docker push $IMAGE_TAG
           docker push $IMAGE_LATEST
-          
+
           echo "✅ Image pushed successfully!"
           echo "📦 Image: $IMAGE_LATEST"
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v2
         with:
-          cluster_name: ${{ secrets.GKE_CLUSTER }}
-          location: ${{ secrets.GKE_LOCATION }}
+          cluster_name: ${{ env.GKE_CLUSTER_NAME }}
+          location: ${{ env.GKE_LOCATION }}
+          project_id: ${{ env.PROJECT_ID }}
 
       - name: Setup Helm
         uses: azure/setup-helm@v3
 
       - name: Deploy Helm chart to GKE
         run: |
-          helm upgrade --install aws-cloud-projects-site learn-k8/helm-chart \
-            --namespace learn-master --create-namespace \
-            --set image.repository=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }} \
-            --set image.tag=${{ github.sha }} \
-            --wait
+          helm upgrade --install aws-cloud-projects-site learn-k8/helm
