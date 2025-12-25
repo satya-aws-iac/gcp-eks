@@ -23,61 +23,6 @@ env:
   WORKING_DIR: './terraform'
 
 jobs:
-  terraform-apply:
-    name: 'Terraform Apply'
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.inputs.action == 'apply'
-    permissions:
-      contents: read
-      id-token: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-          token_format: 'access_token'
-
-      - name: Setup gcloud CLI
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Terraform Init
-        run: terraform init
-        working-directory: ${{ env.WORKING_DIR }}
-
-      - name: Terraform Plan
-        run: |
-          terraform plan -input=false \
-            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
-            -var="region=${{ secrets.GCP_REGION }}" \
-            -var="zone=us-central1-a" \
-            -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
-            -out=tfplan
-        working-directory: ${{ env.WORKING_DIR }}
-
-      - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan
-        working-directory: ${{ env.WORKING_DIR }}
-
-      - name: Get Cluster Info from Terraform
-        id: cluster_info
-        run: |
-          CLUSTER_ZONE=$(terraform output -raw zone)
-          CLUSTER_NAME=$(terraform output -raw cluster_name)
-          echo "zone=${CLUSTER_ZONE}" >> $GITHUB_OUTPUT
-          echo "name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
-          echo "Cluster: ${CLUSTER_NAME} in zone ${CLUSTER_ZONE}"
-        working-directory: ${{ env.WORKING_DIR }}
-
   terraform-destroy:
     name: 'Terraform Destroy'
     runs-on: ubuntu-latest
