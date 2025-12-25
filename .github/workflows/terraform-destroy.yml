@@ -1,35 +1,37 @@
-name: 'Terraform Destroy'
+name: 'Terraform Apply and Destroy'
 
 on:
-  workflow_dispatch:  # Manual trigger only
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-*.yml'
+  workflow_dispatch:
     inputs:
-      confirm_destroy:
-        description: 'Type "destroy" to confirm cluster deletion'
+      action:
+        description: 'Terraform action to perform'
         required: true
-        type: string
+        default: 'apply'
+        type: choice
+        options:
+          - apply
+          - destroy
 
 env:
   TF_VERSION: '1.6.0'
   WORKING_DIR: './terraform'
 
 jobs:
-  terraform-destroy:
-    name: 'Terraform Destroy'
+  terraform-apply:
+    name: 'Terraform Apply'
     runs-on: ubuntu-latest
-    environment: production  # GitHub environment for protection rules
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
     permissions:
       contents: read
       id-token: write
 
     steps:
-      - name: Validate Confirmation
-        run: |
-          if [ "${{ github.event.inputs.confirm_destroy }}" != "destroy" ]; then
-            echo "❌ Destruction cancelled. You must type 'destroy' to proceed."
-            exit 1
-          fi
-          echo "✅ Destruction confirmed - proceeding with cluster deletion"
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -52,53 +54,74 @@ jobs:
         run: terraform init
         working-directory: ${{ env.WORKING_DIR }}
 
-      - name: Force Unlock (if locked)
-        continue-on-error: true
+      - name: Terraform Plan
         run: |
-          # List state to check lock
-          terraform state list 2>&1 | grep -i "lock" || echo "No lock found"
+          terraform plan -input=false \
+            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="region=${{ secrets.GCP_REGION }}" \
+            -var="zone=us-central1-a" \
+            -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
+            -out=tfplan
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Get Cluster Info from Terraform
+        id: cluster_info
+        run: |
+          CLUSTER_ZONE=$(terraform output -raw zone)
+          CLUSTER_NAME=$(terraform output -raw cluster_name)
+          echo "zone=${CLUSTER_ZONE}" >> $GITHUB_OUTPUT
+          echo "name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
+          echo "Cluster: ${CLUSTER_NAME} in zone ${CLUSTER_ZONE}"
+        working-directory: ${{ env.WORKING_DIR }}
+
+  terraform-destroy:
+    name: 'Terraform Destroy'
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          token_format: 'access_token'
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Terraform Init
+        run: terraform init
         working-directory: ${{ env.WORKING_DIR }}
 
       - name: Terraform Plan Destroy
-        id: plan_destroy
         run: |
-          terraform plan -destroy -no-color -input=false \
+          terraform plan -destroy -input=false \
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
+            -var="zone=us-central1-a" \
             -var="cluster_name=${{ secrets.GKE_CLUSTER_NAME }}" \
-            -out=destroy_plan
+            -out=destroy-tfplan
         working-directory: ${{ env.WORKING_DIR }}
 
       - name: Terraform Destroy
-        run: terraform apply -auto-approve destroy_plan
+        run: terraform apply -auto-approve destroy-tfplan
         working-directory: ${{ env.WORKING_DIR }}
 
-      - name: Confirm Cluster Deletion
-        run: |
-          echo "✅ GKE Cluster '${{ secrets.GKE_CLUSTER_NAME }}' has been destroyed"
-          echo "Resources deleted from project: ${{ secrets.GCP_PROJECT_ID }}"
-
-      - name: Create Success Issue
-        uses: actions/github-script@v7
-        if: success()
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const issue = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: '✅ GKE Cluster Destroyed',
-              body: `## Cluster Destruction Completed
-              
-              **Cluster**: \`${{ secrets.GKE_CLUSTER_NAME }}\`
-              **Project**: \`${{ secrets.GCP_PROJECT_ID }}\`
-              **Region**: \`${{ secrets.GCP_REGION }}\`
-              
-              All Terraform-managed resources have been deleted.
-              
-              **Workflow Run**: [View Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-              
-              ⚠️ **Note**: If you have any persistent data (databases, storage buckets) outside of Terraform, they may still exist.
-              `,
-              labels: ['terraform', 'destroyed']
-            });
+      - name: Confirm Destruction
+        run: echo "Infrastructure has been destroyed successfully"
